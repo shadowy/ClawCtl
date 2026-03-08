@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useInstances } from "../hooks/useInstances";
 import { get, post, del } from "../lib/api";
@@ -16,6 +17,7 @@ function PolicyBadge({ value }: { value: string }) {
 }
 
 function InjectionScanner() {
+  const { t } = useTranslation();
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<{risk: string; category?: string; detail?: string} | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -36,7 +38,7 @@ function InjectionScanner() {
       <textarea
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        placeholder="Paste a message to scan for prompt injection..."
+        placeholder={t("security.scanPlaceholder")}
         className="w-full h-24 p-3 bg-s2 border border-edge rounded text-sm text-ink font-mono placeholder:text-ink-3 resize-none focus:outline-none focus:border-cyan"
       />
       <div className="flex items-center gap-3">
@@ -45,7 +47,7 @@ function InjectionScanner() {
           disabled={!message.trim() || scanning}
           className="flex items-center gap-1.5 px-4 py-2 text-sm rounded bg-brand text-white hover:bg-brand-light disabled:opacity-40"
         >
-          <Search size={14} /> {scanning ? "Scanning..." : "Scan"}
+          <Search size={14} /> {scanning ? t("security.scanning") : t("security.scan")}
         </button>
         {result && (
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${
@@ -64,6 +66,7 @@ function InjectionScanner() {
 }
 
 function TemplateManager() {
+  const { t } = useTranslation();
   const { instances } = useInstances();
   const navigate = useNavigate();
   const connectedInstances = instances.filter((i: any) => i.connection.status === "connected");
@@ -93,25 +96,25 @@ function TemplateManager() {
   return (
     <div>
       <div className="divide-y divide-edge">
-        {templates.map((t) => (
-          <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+        {templates.map((tpl) => (
+          <div key={tpl.id} className="flex items-center gap-3 px-4 py-3">
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-ink">{t.name}</span>
-                {t.preset && <span className="px-1.5 py-0.5 text-xs rounded bg-cyan-dim text-cyan">preset</span>}
-                <span className="font-mono text-xs text-ink-3">{t.id}</span>
+                <span className="font-medium text-ink">{tpl.name}</span>
+                {tpl.preset && <span className="px-1.5 py-0.5 text-xs rounded bg-cyan-dim text-cyan">{t("security.preset")}</span>}
+                <span className="font-mono text-xs text-ink-3">{tpl.id}</span>
               </div>
-              <p className="text-xs text-ink-3 mt-0.5">{t.description}</p>
+              <p className="text-xs text-ink-3 mt-0.5">{tpl.description}</p>
               <div className="flex gap-2 mt-1">
-                <span className="text-xs text-ink-2">Tools: {t.config.toolsAllow.join(", ")}</span>
+                <span className="text-xs text-ink-2">{t("security.toolsLabel")} {tpl.config.toolsAllow.join(", ")}</span>
                 <span className="text-xs text-ink-3">|</span>
-                <span className="text-xs text-ink-2">Exec: {t.config.execSecurity}</span>
+                <span className="text-xs text-ink-2">{t("security.execLabel")} {tpl.config.execSecurity}</span>
                 <span className="text-xs text-ink-3">|</span>
-                <span className="text-xs text-ink-2">Workspace: {t.config.workspaceOnly ? "yes" : "no"}</span>
+                <span className="text-xs text-ink-2">{t("security.workspaceLabel")} {tpl.config.workspaceOnly ? "yes" : "no"}</span>
               </div>
             </div>
-            {!t.preset && (
-              <button onClick={() => setConfirmDeleteTemplate({ id: t.id, name: t.name })} className="text-ink-3 hover:text-danger">
+            {!tpl.preset && (
+              <button onClick={() => setConfirmDeleteTemplate({ id: tpl.id, name: tpl.name })} className="text-ink-3 hover:text-danger">
                 <Trash2 size={14} />
               </button>
             )}
@@ -120,12 +123,12 @@ function TemplateManager() {
                 defaultValue=""
                 onChange={(e) => {
                   if (e.target.value) {
-                    navigate(`/instance/${e.target.value}?tab=agents&applyTemplate=${t.id}`);
+                    navigate(`/instance/${e.target.value}?tab=agents&applyTemplate=${tpl.id}`);
                   }
                 }}
                 className="px-2 py-1 text-xs bg-s2 border border-edge rounded text-ink cursor-pointer"
               >
-                <option value="" disabled>Apply to...</option>
+                <option value="" disabled>{t("security.applyTo")}</option>
                 {connectedInstances.map((inst: any) => (
                   <option key={inst.id} value={inst.id}>{inst.connection.label || inst.id}</option>
                 ))}
@@ -138,27 +141,27 @@ function TemplateManager() {
       {!showAdd ? (
         <div className="p-4 border-t border-edge">
           <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 text-sm text-brand hover:text-brand-light">
-            <Plus size={14} /> Add Custom Template
+            <Plus size={14} /> {t("security.addCustomTemplate")}
           </button>
         </div>
       ) : (
         <div className="p-4 border-t border-edge space-y-2">
           <div className="grid grid-cols-2 gap-2">
-            <input value={newId} onChange={(e) => setNewId(e.target.value)} placeholder="Template ID" className="px-2 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3" />
-            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Display Name" className="px-2 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3" />
+            <input value={newId} onChange={(e) => setNewId(e.target.value)} placeholder={t("security.templateIdPlaceholder")} className="px-2 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3" />
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t("security.displayNamePlaceholder")} className="px-2 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3" />
           </div>
-          <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Description" className="w-full px-2 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3" />
+          <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder={t("security.descriptionPlaceholder")} className="w-full px-2 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3" />
           <textarea value={newConfig} onChange={(e) => setNewConfig(e.target.value)} className="w-full h-16 px-2 py-1.5 text-sm font-mono bg-s2 border border-edge rounded text-ink resize-none" />
           <div className="flex gap-2">
-            <button onClick={createTemplate} className="px-3 py-1.5 text-sm rounded bg-brand text-white hover:bg-brand-light">Create</button>
-            <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 text-sm text-ink-3 hover:text-ink">Cancel</button>
+            <button onClick={createTemplate} className="px-3 py-1.5 text-sm rounded bg-brand text-white hover:bg-brand-light">{t("common.create")}</button>
+            <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 text-sm text-ink-3 hover:text-ink">{t("common.cancel")}</button>
           </div>
         </div>
       )}
       {confirmDeleteTemplate && (
         <ConfirmDialog
-          title="Delete Template"
-          message={`Remove security template "${confirmDeleteTemplate.name}"? This action cannot be undone.`}
+          title={t("security.deleteTemplate")}
+          message={t("security.deleteTemplateConfirm", { name: confirmDeleteTemplate.name })}
           onConfirm={async () => {
             try { await del(`/instances/templates/${confirmDeleteTemplate.id}`); refresh(); } catch {}
             setConfirmDeleteTemplate(null);
@@ -171,6 +174,7 @@ function TemplateManager() {
 }
 
 export function Security() {
+  const { t } = useTranslation();
   const { instances } = useInstances();
 
   const connectedInstances = instances.filter((i) => i.connection.status === "connected");
@@ -227,26 +231,26 @@ export function Security() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Security Posture</h1>
+      <h1 className="text-2xl font-bold mb-6">{t("security.title")}</h1>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-danger-dim border border-danger/30 rounded-card p-4 shadow-card">
-          <p className="text-sm text-danger">Critical</p>
+          <p className="text-sm text-danger">{t("security.critical")}</p>
           <p className="text-2xl font-bold text-danger">{critical.length}</p>
         </div>
         <div className="bg-warn-dim border border-warn/30 rounded-card p-4 shadow-card">
-          <p className="text-sm text-warn">Warnings</p>
+          <p className="text-sm text-warn">{t("security.warnings")}</p>
           <p className="text-2xl font-bold text-warn">{warnings.length}</p>
         </div>
         <div className="bg-cyan-dim border border-cyan/30 rounded-card p-4 shadow-card">
-          <p className="text-sm text-cyan">Info</p>
+          <p className="text-sm text-cyan">{t("security.info")}</p>
           <p className="text-2xl font-bold text-cyan">{info.length}</p>
         </div>
       </div>
 
       {allIssues.length > 0 ? (
         <div className="bg-s1 border border-edge rounded-card shadow-card mb-6">
-          <h2 className="text-lg font-semibold p-4 border-b border-edge">Audit Items</h2>
+          <h2 className="text-lg font-semibold p-4 border-b border-edge">{t("security.auditItems")}</h2>
           <div className="divide-y divide-edge">
             {allIssues.map((item, i) => (
               <div key={i} className="p-4">
@@ -266,21 +270,21 @@ export function Security() {
         </div>
       ) : (
         <div className="bg-ok-dim border border-ok/30 rounded-card p-6 text-center text-ok text-sm mb-6 shadow-card">
-          No security audit issues detected
+          {t("security.noAuditIssues")}
         </div>
       )}
 
       {channelPolicies.length > 0 && (
         <div className="bg-s1 border border-edge rounded-card overflow-hidden mb-6 shadow-card">
-          <h2 className="text-lg font-semibold p-4 border-b border-edge">Channel Policies</h2>
+          <h2 className="text-lg font-semibold p-4 border-b border-edge">{t("security.channelPolicies")}</h2>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-edge text-ink-3">
-                <th className="text-left p-3">Instance</th>
-                <th className="text-left p-3">Channel</th>
-                <th className="text-left p-3">Account</th>
-                <th className="text-left p-3">Policy</th>
-                <th className="text-left p-3">Value</th>
+                <th className="text-left p-3">{t("security.instanceHeader")}</th>
+                <th className="text-left p-3">{t("security.channelHeader")}</th>
+                <th className="text-left p-3">{t("security.accountHeader")}</th>
+                <th className="text-left p-3">{t("security.policyHeader")}</th>
+                <th className="text-left p-3">{t("security.valueHeader")}</th>
               </tr>
             </thead>
             <tbody>
@@ -300,15 +304,15 @@ export function Security() {
 
       {allBindings.length > 0 && (
         <div className="bg-s1 border border-edge rounded-card overflow-hidden mb-6 shadow-card">
-          <h2 className="text-lg font-semibold p-4 border-b border-edge">Agent Bindings</h2>
+          <h2 className="text-lg font-semibold p-4 border-b border-edge">{t("security.agentBindings")}</h2>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-edge text-ink-3">
-                <th className="text-left p-3">Instance</th>
-                <th className="text-left p-3">Agent</th>
-                <th className="text-left p-3">Channel</th>
-                <th className="text-left p-3">Account</th>
-                <th className="text-left p-3">Match</th>
+                <th className="text-left p-3">{t("security.instanceHeader")}</th>
+                <th className="text-left p-3">{t("security.agentHeader")}</th>
+                <th className="text-left p-3">{t("security.channelHeader")}</th>
+                <th className="text-left p-3">{t("security.accountHeader")}</th>
+                <th className="text-left p-3">{t("security.matchHeader")}</th>
               </tr>
             </thead>
             <tbody>
@@ -329,22 +333,22 @@ export function Security() {
       )}
 
       <div className="bg-s1 border border-edge rounded-card overflow-hidden shadow-card mb-6">
-        <h2 className="text-lg font-semibold p-4 border-b border-edge">Agent Permissions</h2>
+        <h2 className="text-lg font-semibold p-4 border-b border-edge">{t("security.agentPermissions")}</h2>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-edge text-ink-3">
-              <th className="text-left p-3">Instance</th>
-              <th className="text-left p-3">Agent</th>
-              <th className="text-left p-3">Allowed Tools</th>
-              <th className="text-left p-3">Exec Security</th>
-              <th className="text-left p-3">Risk</th>
+              <th className="text-left p-3">{t("security.instanceHeader")}</th>
+              <th className="text-left p-3">{t("security.agentHeader")}</th>
+              <th className="text-left p-3">{t("security.allowedTools")}</th>
+              <th className="text-left p-3">{t("security.execSecurity")}</th>
+              <th className="text-left p-3">{t("security.riskHeader")}</th>
             </tr>
           </thead>
           <tbody>
             {agentPerms.map((row, i) => {
               const exec = row.execSecurity;
               const hasAll = row.tools.includes("*") || row.tools.length === 0;
-              const hasExec = hasAll || row.tools.some((t) => ["exec", "shell", "bash"].includes(t));
+              const hasExec = hasAll || row.tools.some((tl) => ["exec", "shell", "bash"].includes(tl));
               const isFullExec = hasExec && (!exec || exec.security === "full");
               const risk = isFullExec ? "high" : hasExec ? "medium" : row.tools.length > 10 ? "medium" : "low";
               return (
@@ -380,14 +384,14 @@ export function Security() {
       {/* Injection Scanner */}
       <div className="bg-s1 border border-edge rounded-card shadow-card mb-6">
         <h2 className="text-lg font-semibold p-4 border-b border-edge flex items-center gap-2">
-          <Shield size={18} /> Prompt Injection Scanner
+          <Shield size={18} /> {t("security.injectionScanner")}
         </h2>
         <InjectionScanner />
       </div>
 
       {/* Permission Templates */}
       <div className="bg-s1 border border-edge rounded-card shadow-card">
-        <h2 className="text-lg font-semibold p-4 border-b border-edge">Permission Templates</h2>
+        <h2 className="text-lg font-semibold p-4 border-b border-edge">{t("security.permissionTemplates")}</h2>
         <TemplateManager />
       </div>
     </div>

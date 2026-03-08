@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { get } from "../lib/api";
 
@@ -21,6 +22,7 @@ interface PageResult {
 }
 
 export function Operations() {
+  const { t } = useTranslation();
   const [result, setResult] = useState<PageResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -33,8 +35,8 @@ export function Operations() {
   const pageSize = 50;
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedOp(operator), 400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebouncedOp(operator), 400);
+    return () => clearTimeout(timer);
   }, [operator]);
 
   const fetchOps = useCallback(async () => {
@@ -63,24 +65,24 @@ export function Operations() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Operation Center</h1>
+      <h1 className="text-2xl font-bold mb-6">{t("operations.title")}</h1>
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-4 mb-4">
         <div>
-          <label className="block text-xs text-ink-3 mb-1">Operator</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("operations.operatorLabel")}</label>
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3" />
             <input
               value={operator}
               onChange={(e) => setOperator(e.target.value)}
-              placeholder="Search operator..."
+              placeholder={t("operations.searchOperator")}
               className="pl-8 pr-3 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan w-48"
             />
           </div>
         </div>
         <div>
-          <label className="block text-xs text-ink-3 mb-1">From</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("operations.fromLabel")}</label>
           <input
             type="datetime-local"
             value={fromDate}
@@ -89,7 +91,7 @@ export function Operations() {
           />
         </div>
         <div>
-          <label className="block text-xs text-ink-3 mb-1">To</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("operations.toLabel")}</label>
           <input
             type="datetime-local"
             value={toDate}
@@ -102,22 +104,22 @@ export function Operations() {
             onClick={() => { setOperator(""); setFromDate(""); setToDate(""); }}
             className="px-3 py-1.5 text-sm text-ink-3 hover:text-ink border border-edge rounded"
           >
-            Clear
+            {t("common.clear")}
           </button>
         )}
         <div className="ml-auto text-sm text-ink-3">
-          {result ? `${result.total} records` : ""}
+          {result ? t("common.records", { n: result.total }) : ""}
         </div>
       </div>
 
       {loading && !result ? (
         <div className="flex items-center justify-center py-20 text-ink-3 text-sm">
           <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg>
-          Loading operations...
+          {t("operations.loadingOperations")}
         </div>
       ) : operations.length === 0 ? (
         <div className="bg-s1 border border-edge rounded-card p-8 text-center text-ink-3">
-          {debouncedOp || fromDate || toDate ? "No matching operations" : "No operations recorded yet"}
+          {debouncedOp || fromDate || toDate ? t("operations.noMatchingOperations") : t("operations.noOperationsYet")}
         </div>
       ) : (
         <>
@@ -125,13 +127,13 @@ export function Operations() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-edge text-ink-3">
-                  <th className="text-left p-3">ID</th>
-                  <th className="text-left p-3">Type</th>
-                  <th className="text-left p-3">Instance</th>
-                  <th className="text-left p-3">Status</th>
-                  <th className="text-left p-3">Operator</th>
-                  <th className="text-left p-3">Started</th>
-                  <th className="text-left p-3">Finished</th>
+                  <th className="text-left p-3">{t("operations.idHeader")}</th>
+                  <th className="text-left p-3">{t("operations.typeHeader")}</th>
+                  <th className="text-left p-3">{t("operations.instanceHeader")}</th>
+                  <th className="text-left p-3">{t("operations.statusHeader")}</th>
+                  <th className="text-left p-3">{t("operations.operatorHeader")}</th>
+                  <th className="text-left p-3">{t("operations.startedHeader")}</th>
+                  <th className="text-left p-3">{t("operations.finishedHeader")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -159,7 +161,7 @@ export function Operations() {
           {/* Pagination */}
           <div className="flex items-center justify-between mt-4">
             <span className="text-sm text-ink-3">
-              Page {page} of {totalPages}
+              {t("common.pageOf", { page, total: totalPages })}
             </span>
             <div className="flex gap-2">
               <button
@@ -167,14 +169,14 @@ export function Operations() {
                 disabled={page <= 1}
                 className="flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-edge hover:bg-s2 disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                <ChevronLeft size={14} /> Prev
+                <ChevronLeft size={14} /> {t("common.prev")}
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className="flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-edge hover:bg-s2 disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                Next <ChevronRight size={14} />
+                {t("common.next")} <ChevronRight size={14} />
               </button>
             </div>
           </div>

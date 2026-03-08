@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { X, Plus, Shield } from "lucide-react";
 
 export interface AgentFormValues {
@@ -24,10 +25,10 @@ interface AgentFormProps {
 }
 
 const EXEC_SECURITY_OPTIONS = [
-  { value: "", label: "Not set" },
-  { value: "allowlist", label: "Allowlist" },
-  { value: "full", label: "Full" },
-  { value: "disabled", label: "Disabled" },
+  { value: "", tKey: "agents.execNotSet" },
+  { value: "allowlist", tKey: "agents.execAllowlist" },
+  { value: "full", tKey: "agents.execFull" },
+  { value: "disabled", tKey: "agents.execDisabled" },
 ];
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -39,6 +40,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export function AgentForm({ values, onChange, modelsByProvider, defaultModel, defaultThinking, isNew, onApplyTemplate }: AgentFormProps) {
+  const { t } = useTranslation();
   const [toolInput, setToolInput] = useState("");
   const [modelSearch, setModelSearch] = useState("");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -74,12 +76,12 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
     <div className="space-y-4">
       {/* Agent ID */}
       <div>
-        <label className="block text-xs text-ink-3 mb-1">Agent ID</label>
+        <label className="block text-xs text-ink-3 mb-1">{t("agents.agentIdLabel")}</label>
         {isNew ? (
           <input
             value={values.id}
             onChange={(e) => set("id", e.target.value)}
-            placeholder="e.g. my-agent"
+            placeholder={t("agents.agentIdPlaceholder")}
             className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
           />
         ) : (
@@ -90,8 +92,8 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
       {/* Model: provider filter + combobox */}
       <div>
         <label className="block text-xs text-ink-3 mb-1">
-          Model
-          {!values.model && defaultModel && <span className="ml-1 text-ink-3">(default: {defaultModel})</span>}
+          {t("agents.modelLabel")}
+          {!values.model && defaultModel && <span className="ml-1 text-ink-3">{t("agents.defaultSuffix", { model: defaultModel })}</span>}
         </label>
         <div className="flex gap-2">
           <select
@@ -99,7 +101,7 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
             onChange={(e) => setProviderFilter(e.target.value)}
             className="w-28 shrink-0 px-2 py-2 text-sm bg-s2 border border-edge rounded text-ink focus:outline-none focus:border-cyan"
           >
-            <option value="">All</option>
+            <option value="">{t("agents.allProviders")}</option>
             {providerKeys.map((k) => (
               <option key={k} value={k}>{PROVIDER_LABELS[k] || k}</option>
             ))}
@@ -110,7 +112,7 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
               onChange={(e) => { setModelSearch(e.target.value); set("model", e.target.value); setShowModelDropdown(true); }}
               onFocus={() => setShowModelDropdown(true)}
               onBlur={() => setTimeout(() => setShowModelDropdown(false), 200)}
-              placeholder={defaultModel || "Select model..."}
+              placeholder={defaultModel || t("agents.selectModelPlaceholder")}
               className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
             />
             {showModelDropdown && filteredGroups.length > 0 && (
@@ -152,20 +154,20 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
       {/* Thinking */}
       <div>
         <label className="block text-xs text-ink-3 mb-1">
-          Thinking Level
-          {!values.thinkingDefault && defaultThinking && <span className="ml-1">(default: {defaultThinking})</span>}
+          {t("agents.thinkingLabel")}
+          {!values.thinkingDefault && defaultThinking && <span className="ml-1">{t("agents.defaultSuffix", { model: defaultThinking })}</span>}
         </label>
         <input
           value={values.thinkingDefault}
           onChange={(e) => set("thinkingDefault", e.target.value)}
-          placeholder={defaultThinking || "e.g. on, off, 1024, budget_tokens..."}
+          placeholder={defaultThinking || t("agents.thinkingPlaceholder")}
           className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
         />
       </div>
 
       {/* Tools Allow */}
       <div>
-        <label className="block text-xs text-ink-3 mb-1">Allowed Tools</label>
+        <label className="block text-xs text-ink-3 mb-1">{t("agents.allowedToolsLabel")}</label>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {values.toolsAllow.map((tool) => (
             <span key={tool} className="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-cyan-dim text-cyan">
@@ -179,7 +181,7 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
             value={toolInput}
             onChange={(e) => setToolInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTool(); } }}
-            placeholder="Add tool name..."
+            placeholder={t("agents.addToolPlaceholder")}
             className="flex-1 px-3 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
           />
           <button onClick={addTool} className="px-2 py-1.5 text-sm rounded bg-s2 border border-edge text-ink hover:bg-s3">
@@ -190,32 +192,32 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
 
       {/* Exec Security */}
       <div>
-        <label className="block text-xs text-ink-3 mb-1">Exec Security</label>
+        <label className="block text-xs text-ink-3 mb-1">{t("agents.execSecurityLabel")}</label>
         <select
           value={values.execSecurity}
           onChange={(e) => set("execSecurity", e.target.value)}
           className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink focus:outline-none focus:border-cyan"
         >
           {EXEC_SECURITY_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>{t(o.tKey)}</option>
           ))}
         </select>
       </div>
 
       {/* Workspace */}
       <div>
-        <label className="block text-xs text-ink-3 mb-1">Workspace Directory</label>
+        <label className="block text-xs text-ink-3 mb-1">{t("agents.workspaceLabel")}</label>
         <input
           value={values.workspace}
           onChange={(e) => set("workspace", e.target.value)}
-          placeholder="e.g. /home/ubuntu/proj"
+          placeholder={t("agents.workspacePlaceholder")}
           className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan font-mono"
         />
       </div>
 
       {/* Workspace restrictions */}
       <div className="space-y-2">
-        <label className="block text-xs text-ink-3">Workspace Restrictions</label>
+        <label className="block text-xs text-ink-3">{t("agents.workspaceRestrictions")}</label>
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -223,7 +225,7 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
             onChange={(e) => set("fsWorkspaceOnly", e.target.checked)}
             className="rounded border-edge"
           />
-          <label className="text-sm text-ink">File system — workspace only</label>
+          <label className="text-sm text-ink">{t("agents.fsWorkspaceOnly")}</label>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -232,7 +234,7 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
             onChange={(e) => set("workspaceOnly", e.target.checked)}
             className="rounded border-edge"
           />
-          <label className="text-sm text-ink">Exec/Patch — workspace only</label>
+          <label className="text-sm text-ink">{t("agents.execWorkspaceOnly")}</label>
         </div>
       </div>
 
@@ -241,7 +243,7 @@ export function AgentForm({ values, onChange, modelsByProvider, defaultModel, de
         onClick={onApplyTemplate}
         className="flex items-center gap-1.5 text-sm text-brand hover:text-brand-light"
       >
-        <Shield size={14} /> Apply Permission Template
+        <Shield size={14} /> {t("agents.applyPermissionTemplate")}
       </button>
     </div>
   );

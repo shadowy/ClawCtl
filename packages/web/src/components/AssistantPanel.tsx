@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Bot, Send, Wrench, X, RefreshCw, MessageSquare } from "lucide-react";
 import { post } from "../lib/api";
 import { useInstances } from "../hooks/useInstances";
@@ -49,6 +50,7 @@ function useAssistantContext() {
 }
 
 export function GlobalAssistant() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   return (
@@ -58,7 +60,7 @@ export function GlobalAssistant() {
         <button
           onClick={() => setOpen(true)}
           className="fixed bottom-6 right-6 w-12 h-12 bg-brand text-white rounded-full shadow-lg hover:bg-brand/90 flex items-center justify-center transition-transform hover:scale-105 z-50"
-          title="AI Assistant"
+          title={t("assistant.title")}
         >
           <MessageSquare size={20} />
         </button>
@@ -68,6 +70,7 @@ export function GlobalAssistant() {
 }
 
 function AssistantPanel({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -109,7 +112,7 @@ function AssistantPanel({ onClose }: { onClose: () => void }) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-edge shrink-0">
         <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-          <Bot size={16} className="text-brand" /> AI Assistant
+          <Bot size={16} className="text-brand" /> {t("assistant.title")}
         </div>
         <div className="flex items-center gap-1">
           {ctx.instanceId && (
@@ -128,19 +131,19 @@ function AssistantPanel({ onClose }: { onClose: () => void }) {
             <Bot size={32} className="mb-2 opacity-40" />
             <p className="text-xs text-center px-4">
               {ctx.instanceId
-                ? "Ask about this instance's config, status, or request changes."
-                : "Ask about OpenClaw configuration and management."}
+                ? t("assistant.emptyStateInstance")
+                : t("assistant.emptyStateGeneral")}
             </p>
             <div className="flex flex-col gap-1.5 mt-3 w-full">
               {(ctx.instanceId ? [
-                "Show agent config",
-                "What model is being used?",
-                "Change default model to gpt-4o",
-                "Is this instance running?",
+                t("assistant.quickQuestions.showAgentConfig"),
+                t("assistant.quickQuestions.whatModel"),
+                t("assistant.quickQuestions.changeModel"),
+                t("assistant.quickQuestions.isRunning"),
               ] : [
-                "How do I configure a new agent?",
-                "What are the security best practices?",
-                "Explain channel binding config",
+                t("assistant.quickQuestions.configNewAgent"),
+                t("assistant.quickQuestions.securityBestPractices"),
+                t("assistant.quickQuestions.explainBindings"),
               ]).map((q) => (
                 <button
                   key={q}
@@ -178,7 +181,7 @@ function AssistantPanel({ onClose }: { onClose: () => void }) {
           <div className="flex justify-start">
             <div className="bg-s2 border border-edge rounded-lg px-3 py-2 text-xs text-ink-3">
               <RefreshCw size={12} className="animate-spin inline mr-1.5" />
-              Thinking...
+              {t("assistant.thinking")}
             </div>
           </div>
         )}
@@ -191,7 +194,7 @@ function AssistantPanel({ onClose }: { onClose: () => void }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-            placeholder="Ask or request changes..."
+            placeholder={t("assistant.inputPlaceholder")}
             className="flex-1 px-3 py-2 bg-s2 border border-edge rounded text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:border-brand"
             disabled={loading}
           />

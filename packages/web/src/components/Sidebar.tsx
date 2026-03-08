@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -15,18 +16,20 @@ import {
 } from "lucide-react";
 
 const nav = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/sessions", label: "Sessions", icon: MessageSquare },
-  { to: "/channels", label: "Channels", icon: Radio },
-  { to: "/usage", label: "Usage", icon: BarChart3 },
-  { to: "/monitoring", label: "Monitoring", icon: Activity },
-  { to: "/security", label: "Security", icon: ShieldCheck },
-  { to: "/config", label: "Config", icon: FileCode2 },
-  { to: "/tools", label: "Tools", icon: Wrench },
-  { to: "/operations", label: "Operations", icon: Play },
+  { to: "/", tKey: "sidebar.dashboard", icon: LayoutDashboard },
+  { to: "/sessions", tKey: "sidebar.sessions", icon: MessageSquare },
+  { to: "/channels", tKey: "sidebar.channels", icon: Radio },
+  { to: "/usage", tKey: "sidebar.usage", icon: BarChart3 },
+  { to: "/monitoring", tKey: "sidebar.monitoring", icon: Activity },
+  { to: "/security", tKey: "sidebar.security", icon: ShieldCheck },
+  { to: "/config", tKey: "sidebar.config", icon: FileCode2 },
+  { to: "/tools", tKey: "sidebar.tools", icon: Wrench },
+  { to: "/operations", tKey: "sidebar.operations", icon: Play },
 ];
 
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
+
   return (
     <aside className={`flex flex-col bg-deep border-r border-edge transition-all duration-200 ${collapsed ? "w-16" : "w-56"}`}>
       {/* Brand */}
@@ -58,7 +61,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             }
           >
             <item.icon size={18} strokeWidth={1.8} className="shrink-0" />
-            {!collapsed && <span className="font-medium">{item.label}</span>}
+            {!collapsed && <span className="font-medium">{t(item.tKey)}</span>}
           </NavLink>
         ))}
       </nav>
@@ -76,7 +79,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           }
         >
           <Settings size={18} strokeWidth={1.8} className="shrink-0" />
-          {!collapsed && <span className="font-medium">Settings</span>}
+          {!collapsed && <span className="font-medium">{t("sidebar.settings")}</span>}
         </NavLink>
       </div>
     </aside>

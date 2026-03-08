@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface ConfirmDialogProps {
   title: string;
@@ -8,8 +9,11 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-export function ConfirmDialog({ title, message, confirmLabel = "Delete", onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
+
+  const resolvedConfirmLabel = confirmLabel || t("common.delete");
 
   const handleConfirm = async () => {
     setBusy(true);
@@ -31,14 +35,14 @@ export function ConfirmDialog({ title, message, confirmLabel = "Delete", onConfi
             disabled={busy}
             className="px-4 py-2 text-sm text-ink-2 hover:text-ink transition-colors disabled:opacity-50"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleConfirm}
             disabled={busy}
             className="px-4 py-2 text-sm bg-danger hover:bg-danger/80 rounded-card text-white font-semibold transition-colors disabled:opacity-50"
           >
-            {busy ? "Deleting..." : confirmLabel}
+            {busy ? t("common.deleting") : resolvedConfirmLabel}
           </button>
         </div>
       </div>

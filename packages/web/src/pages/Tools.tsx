@@ -1,8 +1,10 @@
 import { useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useInstances } from "../hooks/useInstances";
 import { post } from "../lib/api";
 
 export function Tools() {
+  const { t } = useTranslation();
   const { instances } = useInstances();
   const [diagInstance, setDiagInstance] = useState("");
   const [diagAgent, setDiagAgent] = useState("");
@@ -15,12 +17,12 @@ export function Tools() {
   // Build tool matrix
   const allTools = new Set<string>();
   instances.forEach((inst) =>
-    inst.agents.forEach((a) => (a.toolsAllow || []).forEach((t) => allTools.add(t)))
+    inst.agents.forEach((a) => (a.toolsAllow || []).forEach((tl) => allTools.add(tl)))
   );
   // Count how many agents allow each tool — most widely used tools sort first
   const toolAllowCount = new Map<string, number>();
   instances.forEach((inst) =>
-    inst.agents.forEach((a) => (a.toolsAllow || []).forEach((t) => toolAllowCount.set(t, (toolAllowCount.get(t) || 0) + 1)))
+    inst.agents.forEach((a) => (a.toolsAllow || []).forEach((tl) => toolAllowCount.set(tl, (toolAllowCount.get(tl) || 0) + 1)))
   );
   const toolNames = [...allTools].sort((a, b) => {
     const diff = (toolAllowCount.get(b) || 0) - (toolAllowCount.get(a) || 0);
@@ -39,7 +41,7 @@ export function Tools() {
       setTimeout(() => diagResultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
     } catch (err: any) {
       setDiagResult(null);
-      setDiagError(err.message || "Diagnostic failed");
+      setDiagError(err.message || t("tools.diagnosticFailed"));
     } finally {
       setDiagLoading(false);
     }
@@ -49,23 +51,23 @@ export function Tools() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Tool Diagnostics</h1>
+      <h1 className="text-2xl font-bold mb-6">{t("tools.title")}</h1>
 
       {/* Diagnostic wizard — top of page for visibility */}
       <div className="bg-s1 border border-edge rounded-card p-4 mb-6 shadow-card">
-        <h2 className="text-lg font-semibold mb-3">Diagnostic Wizard</h2>
+        <h2 className="text-lg font-semibold mb-3">{t("tools.diagnosticWizard")}</h2>
         <div className="flex gap-3 mb-4">
           <select value={diagInstance} onChange={(e) => { setDiagInstance(e.target.value); setDiagAgent(""); }} className="bg-s2 border border-edge rounded-lg px-3 py-2.5 text-sm text-ink">
-            <option value="">Instance</option>
+            <option value="">{t("tools.instancePlaceholder")}</option>
             {instances.map((i) => <option key={i.id} value={i.id}>{i.connection.label || i.id}</option>)}
           </select>
           <select value={diagAgent} onChange={(e) => setDiagAgent(e.target.value)} className="bg-s2 border border-edge rounded-lg px-3 py-2.5 text-sm text-ink">
-            <option value="">Agent</option>
+            <option value="">{t("tools.agentPlaceholder")}</option>
             {(selectedInst?.agents || []).map((a) => <option key={a.id} value={a.id}>{a.id}</option>)}
           </select>
-          <input value={diagTool} onChange={(e) => setDiagTool(e.target.value)} placeholder="Tool name (e.g. search)" className="bg-s2 border border-edge rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-brand transition-colors flex-1" />
+          <input value={diagTool} onChange={(e) => setDiagTool(e.target.value)} placeholder={t("tools.toolNamePlaceholder")} className="bg-s2 border border-edge rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-brand transition-colors flex-1" />
           <button onClick={runDiagnostic} disabled={diagLoading || !diagInstance || !diagAgent || !diagTool} className="px-4 py-2 bg-brand hover:bg-brand-light rounded-lg text-sm text-white font-medium disabled:opacity-50">
-            {diagLoading ? "Running..." : "Diagnose"}
+            {diagLoading ? t("tools.running") : t("tools.diagnose")}
           </button>
         </div>
 
@@ -86,7 +88,7 @@ export function Tools() {
             ))}
             {diagResult.suggestion && (
               <div className="mt-3 p-3 bg-cyan-dim border border-cyan/30 rounded-card text-sm">
-                <span className="font-medium">Suggestion: </span>{diagResult.suggestion}
+                <span className="font-medium">{t("tools.suggestion")} </span>{diagResult.suggestion}
               </div>
             )}
           </div>
@@ -96,15 +98,15 @@ export function Tools() {
       {/* Tool matrix */}
       {toolNames.length > 0 && (
         <div className="bg-s1 border border-edge rounded-card overflow-hidden shadow-card">
-          <h2 className="text-lg font-semibold p-4 border-b border-edge">Tool Availability Matrix</h2>
+          <h2 className="text-lg font-semibold p-4 border-b border-edge">{t("tools.toolAvailabilityMatrix")}</h2>
           <p className="px-4 pb-2 text-xs text-ink-3">
-            <span className="text-ok">&#10003;</span> explicit &nbsp; <span className="text-cyan">&#10003;</span> wildcard (*) &nbsp; <span className="text-ink-3">—</span> not allowed
+            <span className="text-ok">&#10003;</span> {t("tools.explicitLegend")} &nbsp; <span className="text-cyan">&#10003;</span> {t("tools.wildcardLegend")} &nbsp; <span className="text-ink-3">—</span> {t("tools.notAllowedLegend")}
           </p>
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-edge text-ink-2">
-                  <th className="text-left p-3 sticky left-0 bg-s1">Tool</th>
+                  <th className="text-left p-3 sticky left-0 bg-s1">{t("tools.toolHeader")}</th>
                   {instances.flatMap((inst) =>
                     inst.agents.map((a) => (
                       <th key={`${inst.id}-${a.id}`} className="text-left p-3 text-xs">
@@ -127,11 +129,11 @@ export function Tools() {
                         return (
                           <td key={`${inst.id}-${a.id}`} className="p-3 text-center">
                             {isExplicit ? (
-                              <span className="text-ok font-bold text-sm" title="Explicitly allowed">&#10003;</span>
+                              <span className="text-ok font-bold text-sm" title={t("tools.explicitlyAllowed")}>&#10003;</span>
                             ) : isWildcard ? (
-                              <span className="text-cyan text-sm" title="Allowed via wildcard (*)">&#10003;</span>
+                              <span className="text-cyan text-sm" title={t("tools.allowedViaWildcard")}>&#10003;</span>
                             ) : (
-                              <span className="text-ink-3 text-sm" title="Not allowed">—</span>
+                              <span className="text-ink-3 text-sm" title={t("tools.notAllowed")}>—</span>
                             )}
                           </td>
                         );

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { RotateCcw } from "lucide-react";
 import { post } from "../lib/api";
 
@@ -9,6 +10,7 @@ interface RestartDialogProps {
 }
 
 export function RestartDialog({ instanceId, open, onClose }: RestartDialogProps) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -32,20 +34,20 @@ export function RestartDialog({ instanceId, open, onClose }: RestartDialogProps)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-s1 border border-edge rounded-card p-6 shadow-card max-w-sm w-full">
-        <h3 className="text-lg font-semibold text-ink mb-2">Config Saved</h3>
+        <h3 className="text-lg font-semibold text-ink mb-2">{t("restartDialog.title")}</h3>
         <p className="text-sm text-ink-2 mb-4">
-          Configuration saved successfully. Restart the instance to apply changes?
+          {t("restartDialog.message")}
         </p>
         {error && <p className="text-sm text-danger mb-3">{error}</p>}
         {success ? (
-          <p className="text-sm text-green-400 text-center py-2">Restart command sent successfully</p>
+          <p className="text-sm text-green-400 text-center py-2">{t("restartDialog.restartSent")}</p>
         ) : (
           <div className="flex gap-3 justify-end">
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm text-ink-3 hover:text-ink rounded"
             >
-              Later
+              {t("restartDialog.later")}
             </button>
             <button
               onClick={doRestart}
@@ -53,7 +55,7 @@ export function RestartDialog({ instanceId, open, onClose }: RestartDialogProps)
               className="flex items-center gap-1.5 px-4 py-2 text-sm rounded bg-brand text-white hover:bg-brand-light disabled:opacity-40"
             >
               <RotateCcw size={14} />
-              {busy ? "Restarting..." : "Restart Now"}
+              {busy ? t("restartDialog.restarting") : t("restartDialog.restartNow")}
             </button>
           </div>
         )}

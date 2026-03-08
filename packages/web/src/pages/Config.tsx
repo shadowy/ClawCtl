@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, X as XIcon, Minus, GitCompare } from "lucide-react";
 import { useInstances } from "../hooks/useInstances";
 
@@ -49,6 +50,7 @@ function DiffModal({ instA, instB, diff, onClose }: {
   diff: DiffEntry[];
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const diffOnly = diff.filter((d) => d.type !== "same");
   const displayDiff = showAll ? diff : diffOnly;
@@ -61,13 +63,13 @@ function DiffModal({ instA, instB, diff, onClose }: {
       >
         <div className="flex items-center justify-between p-4 border-b border-edge">
           <div>
-            <h2 className="text-lg font-semibold">Config Comparison</h2>
+            <h2 className="text-lg font-semibold">{t("config.configComparison")}</h2>
             <p className="text-sm text-ink-3 mt-0.5">
               <span className="text-warn">{instA.label}</span>
-              {" vs "}
+              {" " + t("config.vs") + " "}
               <span className="text-cyan">{instB.label}</span>
               {" \u2014 "}
-              {diffOnly.length === 0 ? "identical" : `${diffOnly.length} difference${diffOnly.length > 1 ? "s" : ""}`}
+              {diffOnly.length === 0 ? t("config.identical") : t("config.differencesFound", { n: diffOnly.length })}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -76,7 +78,7 @@ function DiffModal({ instA, instB, diff, onClose }: {
                 onClick={() => setShowAll(!showAll)}
                 className="text-xs text-cyan hover:underline"
               >
-                {showAll ? "Differences only" : "Show all"}
+                {showAll ? t("config.differencesOnly") : t("config.showAll")}
               </button>
             )}
             <button onClick={onClose} className="text-ink-3 hover:text-ink text-lg leading-none">&times;</button>
@@ -84,7 +86,7 @@ function DiffModal({ instA, instB, diff, onClose }: {
         </div>
         <div className="flex-1 overflow-auto p-4">
           {displayDiff.length === 0 ? (
-            <p className="text-center text-ink-3 py-8">No differences</p>
+            <p className="text-center text-ink-3 py-8">{t("config.noDifferences")}</p>
           ) : (
             <div className="space-y-1">
               {displayDiff.map((d) => (
@@ -122,6 +124,7 @@ function DiffModal({ instA, instB, diff, onClose }: {
 }
 
 export function Config() {
+  const { t } = useTranslation();
   const { instances } = useInstances();
   const [diffA, setDiffA] = useState<string>("");
   const [diffB, setDiffB] = useState<string>("");
@@ -144,22 +147,22 @@ export function Config() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Config Management</h1>
+      <h1 className="text-2xl font-bold mb-6">{t("config.title")}</h1>
 
       <div className="bg-s1 border border-edge rounded-card p-4 shadow-card mb-6">
-        <h2 className="text-lg font-semibold mb-3">Config Comparison</h2>
+        <h2 className="text-lg font-semibold mb-3">{t("config.configComparison")}</h2>
         <div className="flex items-end gap-4">
           <div className="flex-1">
-            <label className="block text-xs text-ink-3 mb-1">Instance A</label>
+            <label className="block text-xs text-ink-3 mb-1">{t("config.instanceA")}</label>
             <select value={diffA} onChange={(e) => setDiffA(e.target.value)} className="w-full bg-s2 border border-edge rounded-lg px-3 py-2 text-sm text-ink">
-              <option value="">Select...</option>
+              <option value="">{t("config.selectPlaceholder")}</option>
               {instances.map((i) => <option key={i.id} value={i.id}>{i.connection.label || i.id}</option>)}
             </select>
           </div>
           <div className="flex-1">
-            <label className="block text-xs text-ink-3 mb-1">Instance B</label>
+            <label className="block text-xs text-ink-3 mb-1">{t("config.instanceB")}</label>
             <select value={diffB} onChange={(e) => setDiffB(e.target.value)} className="w-full bg-s2 border border-edge rounded-lg px-3 py-2 text-sm text-ink">
-              <option value="">Select...</option>
+              <option value="">{t("config.selectPlaceholder")}</option>
               {instances.map((i) => <option key={i.id} value={i.id}>{i.connection.label || i.id}</option>)}
             </select>
           </div>
@@ -168,12 +171,12 @@ export function Config() {
             disabled={!instA || !instB}
             className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand/90 disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            <GitCompare size={14} /> Compare
+            <GitCompare size={14} /> {t("common.compare")}
           </button>
         </div>
         {instA && instB && (
           <p className="text-xs text-ink-3 mt-2">
-            {diffOnly.length === 0 ? "Configs are identical" : `${diffOnly.length} difference${diffOnly.length > 1 ? "s" : ""} found`}
+            {diffOnly.length === 0 ? t("config.configsIdentical") : t("config.differencesFound", { n: diffOnly.length })}
           </p>
         )}
       </div>
@@ -189,12 +192,12 @@ export function Config() {
 
       {skillNames.length > 0 && (
         <div className="bg-s1 border border-edge rounded-card overflow-hidden shadow-card">
-          <h2 className="text-lg font-semibold p-4 border-b border-edge">Skill Comparison</h2>
+          <h2 className="text-lg font-semibold p-4 border-b border-edge">{t("config.skillComparison")}</h2>
           <div className="overflow-auto max-h-[500px]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-s1">
                 <tr className="border-b border-edge text-ink-2">
-                  <th className="text-left p-3">Skill</th>
+                  <th className="text-left p-3">{t("config.skillHeader")}</th>
                   {instances.map((i) => <th key={i.id} className="text-center p-3">{i.connection.label || i.id}</th>)}
                 </tr>
               </thead>

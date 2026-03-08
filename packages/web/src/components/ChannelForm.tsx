@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { X, Plus } from "lucide-react";
 
 export interface ChannelFormValues {
@@ -22,27 +23,28 @@ interface ChannelFormProps {
 }
 
 const DM_POLICY_OPTIONS = [
-  { value: "", label: "Not set" },
-  { value: "pairing", label: "Pairing" },
-  { value: "allowlist", label: "Allowlist" },
-  { value: "open", label: "Open" },
-  { value: "disabled", label: "Disabled" },
+  { value: "", tKey: "forms.dmPolicyNotSet" },
+  { value: "pairing", tKey: "forms.dmPolicyPairing" },
+  { value: "allowlist", tKey: "forms.dmPolicyAllowlist" },
+  { value: "open", tKey: "forms.dmPolicyOpen" },
+  { value: "disabled", tKey: "forms.dmPolicyDisabled" },
 ];
 
 const GROUP_POLICY_OPTIONS = [
-  { value: "", label: "Not set" },
-  { value: "open", label: "Open" },
-  { value: "deny", label: "Deny" },
-  { value: "allowlist", label: "Allowlist" },
+  { value: "", tKey: "forms.groupPolicyNotSet" },
+  { value: "open", tKey: "forms.groupPolicyOpen" },
+  { value: "deny", tKey: "forms.groupPolicyDeny" },
+  { value: "allowlist", tKey: "forms.groupPolicyAllowlist" },
 ];
 
 const CHUNK_MODE_OPTIONS = [
-  { value: "", label: "Not set" },
-  { value: "split", label: "Split" },
-  { value: "truncate", label: "Truncate" },
+  { value: "", tKey: "forms.chunkModeNotSet" },
+  { value: "split", tKey: "forms.chunkModeSplit" },
+  { value: "truncate", tKey: "forms.chunkModeTruncate" },
 ];
 
 export function ChannelForm({ values, onChange, channelType, accountId }: ChannelFormProps) {
+  const { t } = useTranslation();
   const [allowFromInput, setAllowFromInput] = useState("");
   const [groupAllowFromInput, setGroupAllowFromInput] = useState("");
 
@@ -78,11 +80,11 @@ export function ChannelForm({ values, onChange, channelType, accountId }: Channe
       {/* Channel / Account info (read-only) */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs text-ink-3 mb-1">Channel Type</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("forms.channelTypeLabel")}</label>
           <div className="px-3 py-2 text-sm bg-s2/50 border border-edge rounded text-ink-2 font-mono">{channelType}</div>
         </div>
         <div>
-          <label className="block text-xs text-ink-3 mb-1">Account ID</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("forms.accountIdLabel")}</label>
           <div className="px-3 py-2 text-sm bg-s2/50 border border-edge rounded text-ink-2 font-mono">{accountId}</div>
         </div>
       </div>
@@ -95,40 +97,40 @@ export function ChannelForm({ values, onChange, channelType, accountId }: Channe
           onChange={(e) => set("enabled", e.target.checked)}
           className="rounded border-edge"
         />
-        <label className="text-sm text-ink">Enabled</label>
+        <label className="text-sm text-ink">{t("forms.enabledLabel")}</label>
       </div>
 
       {/* DM Policy */}
       <div>
-        <label className="block text-xs text-ink-3 mb-1">DM Policy</label>
+        <label className="block text-xs text-ink-3 mb-1">{t("forms.dmPolicyLabel")}</label>
         <select
           value={values.dmPolicy}
           onChange={(e) => set("dmPolicy", e.target.value)}
           className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink focus:outline-none focus:border-cyan"
         >
           {DM_POLICY_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>{t(o.tKey)}</option>
           ))}
         </select>
       </div>
 
       {/* Group Policy */}
       <div>
-        <label className="block text-xs text-ink-3 mb-1">Group Policy</label>
+        <label className="block text-xs text-ink-3 mb-1">{t("forms.groupPolicyLabel")}</label>
         <select
           value={values.groupPolicy}
           onChange={(e) => set("groupPolicy", e.target.value)}
           className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink focus:outline-none focus:border-cyan"
         >
           {GROUP_POLICY_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>{t(o.tKey)}</option>
           ))}
         </select>
       </div>
 
       {/* Allow From (DM) */}
       <div>
-        <label className="block text-xs text-ink-3 mb-1">Allow From (DM)</label>
+        <label className="block text-xs text-ink-3 mb-1">{t("forms.allowFromDmLabel")}</label>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {values.allowFrom.map((entry) => (
             <span key={entry} className="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-cyan-dim text-cyan">
@@ -142,7 +144,7 @@ export function ChannelForm({ values, onChange, channelType, accountId }: Channe
             value={allowFromInput}
             onChange={(e) => setAllowFromInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addAllowFrom(); } }}
-            placeholder="Add user/peer ID..."
+            placeholder={t("forms.allowFromDmPlaceholder")}
             className="flex-1 px-3 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
           />
           <button onClick={addAllowFrom} className="px-2 py-1.5 text-sm rounded bg-s2 border border-edge text-ink hover:bg-s3">
@@ -153,7 +155,7 @@ export function ChannelForm({ values, onChange, channelType, accountId }: Channe
 
       {/* Group Allow From */}
       <div>
-        <label className="block text-xs text-ink-3 mb-1">Allow From (Group)</label>
+        <label className="block text-xs text-ink-3 mb-1">{t("forms.allowFromGroupLabel")}</label>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {values.groupAllowFrom.map((entry) => (
             <span key={entry} className="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-cyan-dim text-cyan">
@@ -167,7 +169,7 @@ export function ChannelForm({ values, onChange, channelType, accountId }: Channe
             value={groupAllowFromInput}
             onChange={(e) => setGroupAllowFromInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addGroupAllowFrom(); } }}
-            placeholder="Add group/chat ID..."
+            placeholder={t("forms.allowFromGroupPlaceholder")}
             className="flex-1 px-3 py-1.5 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
           />
           <button onClick={addGroupAllowFrom} className="px-2 py-1.5 text-sm rounded bg-s2 border border-edge text-ink hover:bg-s3">
@@ -179,22 +181,22 @@ export function ChannelForm({ values, onChange, channelType, accountId }: Channe
       {/* History Limits — 2-col grid */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs text-ink-3 mb-1">History Limit</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("forms.historyLimitLabel")}</label>
           <input
             type="number"
             value={values.historyLimit}
             onChange={(e) => set("historyLimit", e.target.value === "" ? "" : Number(e.target.value))}
-            placeholder="Default"
+            placeholder={t("forms.defaultPlaceholder")}
             className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
           />
         </div>
         <div>
-          <label className="block text-xs text-ink-3 mb-1">DM History Limit</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("forms.dmHistoryLimitLabel")}</label>
           <input
             type="number"
             value={values.dmHistoryLimit}
             onChange={(e) => set("dmHistoryLimit", e.target.value === "" ? "" : Number(e.target.value))}
-            placeholder="Default"
+            placeholder={t("forms.defaultPlaceholder")}
             className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
           />
         </div>
@@ -203,24 +205,24 @@ export function ChannelForm({ values, onChange, channelType, accountId }: Channe
       {/* Text Chunk Limit + Chunk Mode — 2-col grid */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs text-ink-3 mb-1">Text Chunk Limit</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("forms.textChunkLimitLabel")}</label>
           <input
             type="number"
             value={values.textChunkLimit}
             onChange={(e) => set("textChunkLimit", e.target.value === "" ? "" : Number(e.target.value))}
-            placeholder="Default"
+            placeholder={t("forms.defaultPlaceholder")}
             className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink placeholder:text-ink-3 focus:outline-none focus:border-cyan"
           />
         </div>
         <div>
-          <label className="block text-xs text-ink-3 mb-1">Chunk Mode</label>
+          <label className="block text-xs text-ink-3 mb-1">{t("forms.chunkModeLabel")}</label>
           <select
             value={values.chunkMode}
             onChange={(e) => set("chunkMode", e.target.value)}
             className="w-full px-3 py-2 text-sm bg-s2 border border-edge rounded text-ink focus:outline-none focus:border-cyan"
           >
             {CHUNK_MODE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>{t(o.tKey)}</option>
             ))}
           </select>
         </div>
@@ -234,7 +236,7 @@ export function ChannelForm({ values, onChange, channelType, accountId }: Channe
           onChange={(e) => set("blockStreaming", e.target.checked)}
           className="rounded border-edge"
         />
-        <label className="text-sm text-ink">Block Streaming</label>
+        <label className="text-sm text-ink">{t("forms.blockStreamingLabel")}</label>
       </div>
     </div>
   );

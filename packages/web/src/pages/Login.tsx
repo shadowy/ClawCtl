@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../hooks/useAuth";
 import { ShieldCheck } from "lucide-react";
 
 export function Login() {
+  const { t } = useTranslation();
   const { login, setup, needsSetup } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +22,7 @@ export function Login() {
         await login(username, password);
       }
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.message || t("login.loginFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -38,18 +40,18 @@ export function Login() {
             <span className="text-brand">Claw</span>
             <span className="text-ink">Ctl</span>
           </h1>
-          <p className="text-sm text-ink-3">Multi-instance OpenClaw Management</p>
+          <p className="text-sm text-ink-3">{t("login.subtitle")}</p>
         </div>
 
         {/* Card */}
         <div className="bg-s1 border border-edge rounded-card p-6 shadow-card">
           <p className="text-sm text-ink-2 mb-5">
-            {needsSetup ? "Create your admin account to get started" : "Sign in to continue"}
+            {needsSetup ? t("login.setupPrompt") : t("login.signInPrompt")}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs text-ink-3 mb-1.5 font-medium uppercase tracking-wide">Username</label>
+              <label className="block text-xs text-ink-3 mb-1.5 font-medium uppercase tracking-wide">{t("login.usernameLabel")}</label>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -59,7 +61,7 @@ export function Login() {
               />
             </div>
             <div>
-              <label className="block text-xs text-ink-3 mb-1.5 font-medium uppercase tracking-wide">Password</label>
+              <label className="block text-xs text-ink-3 mb-1.5 font-medium uppercase tracking-wide">{t("login.passwordLabel")}</label>
               <input
                 type="password"
                 value={password}
@@ -69,7 +71,7 @@ export function Login() {
                 minLength={6}
               />
               {needsSetup && (
-                <p className="text-xs text-ink-3 mt-1.5">Minimum 6 characters</p>
+                <p className="text-xs text-ink-3 mt-1.5">{t("login.passwordHint")}</p>
               )}
             </div>
 
@@ -82,7 +84,7 @@ export function Login() {
               disabled={submitting || !username || !password}
               className="w-full px-4 py-2.5 bg-brand hover:bg-brand-light rounded-lg text-sm text-white font-semibold disabled:opacity-40 transition-colors shadow-glow-brand"
             >
-              {submitting ? "..." : needsSetup ? "Create Admin Account" : "Sign In"}
+              {submitting ? "..." : needsSetup ? t("login.createAdmin") : t("login.signIn")}
             </button>
           </form>
         </div>
@@ -90,7 +92,7 @@ export function Login() {
         {needsSetup && (
           <div className="flex items-center justify-center gap-1.5 mt-5 text-xs text-ink-3">
             <ShieldCheck size={12} />
-            <span>First run — this account will have full admin privileges</span>
+            <span>{t("login.firstRunNote")}</span>
           </div>
         )}
       </div>
