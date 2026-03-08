@@ -538,7 +538,68 @@ describe("Lifecycle API routes", () => {
     });
   });
 
-  // ---- Channel config ----
+  // ---- Channel endpoints ----
+
+  describe("GET /:id/channels", () => {
+    it("returns channel details from gateway", async () => {
+      const res = await app.request("/lifecycle/ssh-1-main/channels");
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.channels).toHaveLength(1);
+      expect(data.channels[0].type).toBe("telegram");
+      expect(data.channels[0].accounts[0].accountId).toBe("default");
+    });
+
+    it("returns 404 for unknown instance", async () => {
+      const res = await app.request("/lifecycle/nonexistent/channels");
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("POST /:id/channels/probe", () => {
+    it("returns probed channel details", async () => {
+      const res = await app.request("/lifecycle/ssh-1-main/channels/probe", { method: "POST" });
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.channels).toHaveLength(1);
+    });
+
+    it("returns 404 for unknown instance", async () => {
+      const res = await app.request("/lifecycle/nonexistent/channels/probe", { method: "POST" });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("POST /:id/channels/logout", () => {
+    it("logs out channel account", async () => {
+      const res = await app.request("/lifecycle/ssh-1-main/channels/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel: "telegram", accountId: "default" }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.ok).toBe(true);
+    });
+
+    it("returns 400 when channel missing", async () => {
+      const res = await app.request("/lifecycle/ssh-1-main/channels/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 404 for unknown instance", async () => {
+      const res = await app.request("/lifecycle/nonexistent/channels/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel: "telegram" }),
+      });
+      expect(res.status).toBe(404);
+    });
+  });
 
   describe("PUT /:id/channels/config", () => {
     it("merges channel config and writes back", async () => {

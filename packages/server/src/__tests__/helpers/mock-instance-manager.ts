@@ -19,6 +19,18 @@ export class MockInstanceManager extends EventEmitter {
         fetchToolsForAgent: async () => [
           { name: "exec", category: "Runtime", description: "Execute commands", enabled: true, source: "core" },
         ],
+        fetchChannelDetails: async () => ({
+          channelOrder: ["telegram"],
+          channelLabels: { telegram: "Telegram" },
+          channels: [{
+            type: "telegram",
+            label: "Telegram",
+            defaultAccountId: "default",
+            accounts: [{ accountId: "default", enabled: true, configured: true, running: true, connected: true }],
+          }],
+          defaultAccountIds: { telegram: "default" },
+        }),
+        channelLogout: async () => ({ ok: true }),
       } as any);
     }
   }

@@ -274,7 +274,7 @@ Mounts `~/.openclaw*` directories read-only for instance auto-discovery.
 ## Testing
 
 ```bash
-npm run test:unit          # Backend unit tests (362 tests)
+npm run test:unit          # Backend unit tests (369 tests)
 npm run test:components    # Frontend component tests
 npm run test:e2e           # Playwright E2E tests
 npm run test:live          # Live integration tests (needs running OpenClaw)
