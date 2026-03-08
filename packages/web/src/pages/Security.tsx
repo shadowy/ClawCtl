@@ -355,7 +355,7 @@ export function Security() {
                 <tr key={i} className="border-b border-edge/50 hover:bg-s1/50">
                   <td className="p-3">{row.instance}</td>
                   <td className="p-3">{row.agent}{row.isDefault ? " (default)" : ""}</td>
-                  <td className="p-3">{row.tools.length > 0 ? row.tools.join(", ") : "all"}</td>
+                  <td className="p-3">{row.tools.length === 0 || (row.tools.length === 1 && row.tools[0] === "*") ? <span className="px-2 py-0.5 rounded text-xs bg-danger-dim text-danger">all</span> : row.tools.join(", ")}</td>
                   <td className="p-3">
                     {exec ? (
                       <div className="space-y-0.5">

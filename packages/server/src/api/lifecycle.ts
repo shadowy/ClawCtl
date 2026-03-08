@@ -8,7 +8,7 @@ import { auditLog } from "../audit.js";
 import { getExecutor, getHostExecutor } from "../executor/factory.js";
 import { getProcessStatus, stopProcess, startProcess, restartProcess } from "../lifecycle/service.js";
 import { checkNodeVersion, getVersions, streamInstall, streamUninstall } from "../lifecycle/install.js";
-import { readRemoteConfig, writeRemoteConfig, getConfigDir, profileFromInstanceId } from "../lifecycle/config.js";
+import { readRemoteConfig, writeRemoteConfig, readAuthProfiles, writeAuthProfiles, getConfigDir, profileFromInstanceId } from "../lifecycle/config.js";
 import { SnapshotStore } from "../lifecycle/snapshot.js";
 import { extractModels, mergeAgentConfig, removeAgent } from "../lifecycle/agent-config.js";
 import { mergeChannelAccountConfig } from "../lifecycle/channel-config.js";
@@ -377,23 +377,31 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
     const configDir = getConfigDir(profile);
     const exec = getExecutor(id, hostStore);
     try {
+      // OpenClaw reads API keys from auth-profiles.json, NOT from openclaw.json.
+      // Write OAuth token to auth-profiles.json for all agents in this instance.
       const config = await readRemoteConfig(exec, configDir);
-      if (!config.models) config.models = {};
-      if (!config.models.providers) config.models.providers = {};
-      const existing = config.models.providers.openai || {};
-      // Only write fields that OpenClaw recognizes — _oauth* are ClawCtl-internal
-      // and cause config validation failure. 'models' array is required by schema.
-      config.models.providers.openai = {
-        ...existing,
-        baseUrl: existing.baseUrl || "https://api.openai.com/v1",
-        auth: "oauth",
-        apiKey: status.credentials.accessToken,
-        models: existing.models || [],
+      const agentList: any[] = config?.agents?.list || [];
+      const agentIds = agentList.map((a: any) => a.id);
+      if (agentIds.length === 0) agentIds.push("main"); // fallback
+
+      const oauthProfile = {
+        type: "oauth",
+        provider: "openai-codex",
+        access: status.credentials.accessToken,
+        refresh: status.credentials.refreshToken || "",
+        expires: status.credentials.expiresAt || 0,
       };
-      await writeRemoteConfig(exec, configDir, config);
+
+      for (const agentId of agentIds) {
+        const profiles = await readAuthProfiles(exec, configDir, agentId);
+        if (!profiles.profiles) profiles.profiles = {};
+        profiles.profiles["openai-codex:default"] = oauthProfile;
+        await writeAuthProfiles(exec, configDir, agentId, profiles);
+      }
+
       clearOAuthFlow();
-      auditLog(db, c, "lifecycle.providers.oauth", "OpenAI OAuth configured", id);
-      return c.json({ ok: true, expiresAt: status.credentials.expiresAt });
+      auditLog(db, c, "lifecycle.providers.oauth", `OpenAI OAuth configured for agents: ${agentIds.join(", ")}`, id);
+      return c.json({ ok: true, expiresAt: status.credentials.expiresAt, agents: agentIds });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }
