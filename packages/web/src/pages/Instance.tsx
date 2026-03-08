@@ -26,7 +26,7 @@ function StatusDot({ status }: { status: string }) {
 
 type Tab = "overview" | "sessions" | "config" | "security" | "agents" | "channels" | "llm" | "control";
 
-function OverviewTab({ inst }: { inst: InstanceInfo }) {
+function OverviewTab({ inst, onSwitchTab }: { inst: InstanceInfo; onSwitchTab: (tab: Tab) => void }) {
   const totalTokens = inst.sessions.reduce((t, s) => t + (s.totalTokens || 0), 0);
 
   return (
@@ -71,20 +71,19 @@ function OverviewTab({ inst }: { inst: InstanceInfo }) {
         </table>
       </div>
 
+      {/* Channels summary card */}
       <div className="bg-s1 border border-edge rounded-card overflow-hidden shadow-card">
         <h3 className="text-lg font-semibold p-4 border-b border-edge text-ink">Channels</h3>
-        <div className="p-4 flex gap-3 flex-wrap">
-          {inst.channels.map((ch) => (
-            <div key={ch.type + (ch.accountId || "")} className={`px-3 py-2 rounded border text-sm ${ch.running ? "border-ok/30 bg-ok-dim" : "border-edge bg-s2"}`}>
-              <span className="font-medium">{ch.type}</span>
-              {ch.accountId && <span className="text-ink-3 ml-1">({ch.accountId})</span>}
-              <span className={`ml-2 text-xs ${ch.running ? "text-ok" : "text-ink-3"}`}>
-                {ch.running ? "running" : ch.enabled ? "stopped" : "disabled"}
-              </span>
-            </div>
-          ))}
-          {inst.channels.length === 0 && <p className="text-ink-3 text-sm">No channels configured</p>}
-        </div>
+        <button
+          onClick={() => onSwitchTab("channels")}
+          className="w-full text-left p-4 hover:bg-s2/50 transition-colors"
+        >
+          <div className="text-sm text-ink">
+            {inst.channels.length} channel{inst.channels.length !== 1 ? "s" : ""},{" "}
+            <span className="text-ok">{inst.channels.filter((c) => c.running).length} running</span>
+          </div>
+          <div className="text-xs text-ink-3 mt-1">Click to manage channels →</div>
+        </button>
       </div>
     </div>
   );
@@ -1959,7 +1958,7 @@ export function Instance() {
         </div>
 
         <div className="flex-1 overflow-auto">
-          {activeTab === "overview" && <OverviewTab inst={inst} />}
+          {activeTab === "overview" && <OverviewTab inst={inst} onSwitchTab={setActiveTab} />}
           {activeTab === "sessions" && <SessionsTab inst={inst} />}
           {activeTab === "config" && <ConfigTab inst={inst} />}
           {activeTab === "security" && <SecurityTab inst={inst} />}
