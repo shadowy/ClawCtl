@@ -7,6 +7,9 @@ import type {
   HealthStatus,
   AgentInfo,
   ChannelInfo,
+  ChannelDetail,
+  ChannelStatusResponse,
+  ChannelAccountInfo,
   SessionSummary,
   SkillInfo,
   SecurityAuditItem,
@@ -226,6 +229,48 @@ export class GatewayClient extends EventEmitter {
     }));
   }
 
+  async fetchChannelDetails(probe = false): Promise<ChannelStatusResponse> {
+    const r = await this.rpc("channels.status", probe ? { probe: true, timeoutMs: 10_000 } : {});
+    const channelOrder: string[] = r?.channelOrder || [];
+    const channelLabels: Record<string, string> = r?.channelLabels || {};
+    const channelAccounts: Record<string, any[]> = r?.channelAccounts || {};
+    const channelDefaultAccountId: Record<string, string> = r?.channelDefaultAccountId || {};
+
+    const channels: ChannelDetail[] = channelOrder.map((type) => ({
+      type,
+      label: channelLabels[type] || type,
+      defaultAccountId: channelDefaultAccountId[type],
+      accounts: (channelAccounts[type] || []).map((a: any) => ({
+        accountId: a.accountId || "default",
+        name: a.name,
+        enabled: a.enabled ?? true,
+        configured: a.configured ?? false,
+        running: a.running ?? false,
+        connected: a.connected ?? false,
+        restartPending: a.restartPending,
+        reconnectAttempts: a.reconnectAttempts,
+        lastConnectedAt: a.lastConnectedAt,
+        lastError: a.lastError,
+        lastStartAt: a.lastStartAt,
+        lastStopAt: a.lastStopAt,
+        lastInboundAt: a.lastInboundAt,
+        lastOutboundAt: a.lastOutboundAt,
+        busy: a.busy,
+        activeRuns: a.activeRuns,
+        dmPolicy: a.dmPolicy,
+        groupPolicy: a.groupPolicy,
+        allowFrom: a.allowFrom,
+        groupAllowFrom: a.groupAllowFrom,
+      })),
+    })).filter((ch) => ch.accounts.length > 0);
+
+    return { channelOrder, channelLabels, channels, defaultAccountIds: channelDefaultAccountId };
+  }
+
+  async channelLogout(channel: string, accountId?: string): Promise<any> {
+    return this.rpc("channels.logout", { channel, ...(accountId ? { accountId } : {}) });
+  }
+
   async fetchSessions(): Promise<SessionSummary[]> {
     const r = await this.rpc("sessions.list", {});
     return (r?.sessions || []).map((s: any) => ({
@@ -320,9 +365,9 @@ export class GatewayClient extends EventEmitter {
     const defaultThinking = agentsDefaults.thinkingDefault;
     // agents.list[] is the per-agent config array (not agents.agents{})
     const agentList: any[] = parsed?.agents?.list || [];
-    const agentConfigMap = new Map(agentList.map((a: any) => [a.id, a]));
+    const agentConfigMap = new Map(agentList.map((a: any) => [a.id?.toLowerCase(), a]));
     const resolvedAgents = agents.map((a) => {
-      const perAgent = agentConfigMap.get(a.id) || {};
+      const perAgent = agentConfigMap.get(a.id?.toLowerCase()) || {};
       const model = (!a.model || a.model === "default")
         ? (perAgent.model?.primary || defaultModel || a.model)
         : a.model;

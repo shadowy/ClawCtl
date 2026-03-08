@@ -50,6 +50,43 @@ export interface ChannelInfo {
   configured: boolean;
 }
 
+export interface ChannelAccountInfo {
+  accountId: string;
+  name?: string;
+  enabled: boolean;
+  configured: boolean;
+  running: boolean;
+  connected: boolean;
+  restartPending?: boolean;
+  reconnectAttempts?: number;
+  lastConnectedAt?: number | null;
+  lastError?: string | null;
+  lastStartAt?: number | null;
+  lastStopAt?: number | null;
+  lastInboundAt?: number | null;
+  lastOutboundAt?: number | null;
+  busy?: boolean;
+  activeRuns?: number;
+  dmPolicy?: string;
+  groupPolicy?: string;
+  allowFrom?: (string | number)[];
+  groupAllowFrom?: (string | number)[];
+}
+
+export interface ChannelDetail {
+  type: string;
+  label: string;
+  defaultAccountId?: string;
+  accounts: ChannelAccountInfo[];
+}
+
+export interface ChannelStatusResponse {
+  channelOrder: string[];
+  channelLabels: Record<string, string>;
+  channels: ChannelDetail[];
+  defaultAccountIds: Record<string, string>;
+}
+
 export interface SessionSummary {
   key: string;
   kind: string;
