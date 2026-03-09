@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { ChevronLeft, RefreshCw, ArrowUpDown, Play, Square, RotateCcw, Download, ArrowUpCircle, Save, Terminal, Camera, GitCompare, Trash2, Users, Plus, Radio, LogOut, Search } from "lucide-react";
+import { ChevronLeft, RefreshCw, ArrowUpDown, Play, Square, RotateCcw, Save, Terminal, Camera, GitCompare, Trash2, Users, Plus, Radio, LogOut, Search } from "lucide-react";
 import { useInstances, type InstanceInfo } from "../hooks/useInstances";
 import { get, post, put } from "../lib/api";
 import { del } from "../lib/api";
@@ -9,7 +9,7 @@ import { AgentForm, type AgentFormValues } from "../components/AgentForm";
 import { ChannelForm, type ChannelFormValues } from "../components/ChannelForm";
 import { TemplateApplyModal } from "../components/TemplateApplyModal";
 import { RestartDialog } from "../components/RestartDialog";
-import { ConfirmDialog } from "../components/ConfirmDialog";
+
 
 function timeAgo(ts?: number): string {
   if (!ts) return "";
@@ -699,9 +699,16 @@ function AgentsTab({ inst, initialAgentId, onSwitchTab }: { inst: InstanceInfo; 
 const PROVIDER_PRESETS: Record<string, { label: string; baseUrl: string; api: string; keyPlaceholder: string }> = {
   openai: { label: "OpenAI", baseUrl: "https://api.openai.com/v1", api: "openai-responses", keyPlaceholder: "sk-..." },
   anthropic: { label: "Anthropic", baseUrl: "https://api.anthropic.com", api: "anthropic-messages", keyPlaceholder: "sk-ant-..." },
-  deepseek: { label: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", api: "openai-completions", keyPlaceholder: "sk-..." },
   google: { label: "Google AI", baseUrl: "https://generativelanguage.googleapis.com/v1beta", api: "google-generative-ai", keyPlaceholder: "AIza..." },
   azure: { label: "Azure OpenAI", baseUrl: "https://{resource}.openai.azure.com/openai", api: "openai-completions", keyPlaceholder: "API key" },
+  moonshot: { label: "Moonshot (Kimi)", baseUrl: "https://api.moonshot.cn/v1", api: "openai-completions", keyPlaceholder: "sk-..." },
+  deepseek: { label: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", api: "openai-completions", keyPlaceholder: "sk-..." },
+  zhipu: { label: "智谱 (GLM)", baseUrl: "https://open.bigmodel.cn/api/paas/v4", api: "openai-completions", keyPlaceholder: "API key" },
+  qwen: { label: "通义千问", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", api: "openai-completions", keyPlaceholder: "sk-..." },
+  baichuan: { label: "百川", baseUrl: "https://api.baichuan-ai.com/v1", api: "openai-completions", keyPlaceholder: "sk-..." },
+  minimax: { label: "MiniMax", baseUrl: "https://api.minimax.chat/v1", api: "openai-completions", keyPlaceholder: "API key" },
+  yi: { label: "零一万物", baseUrl: "https://api.lingyiwanwu.com/v1", api: "openai-completions", keyPlaceholder: "sk-..." },
+  stepfun: { label: "阶跃星辰", baseUrl: "https://api.stepfun.com/v1", api: "openai-completions", keyPlaceholder: "sk-..." },
   ollama: { label: "Ollama (local)", baseUrl: "http://localhost:11434", api: "ollama", keyPlaceholder: "" },
   custom: { label: "Custom / Other", baseUrl: "", api: "", keyPlaceholder: "API key" },
 };
@@ -1276,85 +1283,6 @@ function ControlTab({ inst }: { inst: InstanceInfo }) {
     } finally { setBusy(""); }
   };
 
-  const [installVersion, setInstallVersion] = useState("");
-  const [installSteps, setInstallSteps] = useState<Array<{ step: string; status: string; detail?: string }>>([]);
-  const [confirmUninstall, setConfirmUninstall] = useState(false);
-
-  const doInstall = async () => {
-    const hostId = inst.id.match(/^ssh-(\d+)-/)?.[1] || "local";
-    setBusy("install");
-    setInstallSteps([]);
-    try {
-      const res = await fetch(`/api/lifecycle/host/${hostId}/install`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ version: installVersion || undefined }),
-      });
-      const reader = res.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        let buffer = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            try {
-              const msg = JSON.parse(line.slice(6));
-              if (msg.done !== undefined) break;
-              setInstallSteps((prev) => {
-                const idx = prev.findIndex((s) => s.step === msg.step);
-                if (idx >= 0) { const next = [...prev]; next[idx] = msg; return next; }
-                return [...prev, msg];
-              });
-            } catch { /* ignore */ }
-          }
-        }
-      }
-      await fetchVersions();
-    } finally { setBusy(""); }
-  };
-
-  const doUninstall = async () => {
-    const hostId = inst.id.match(/^ssh-(\d+)-/)?.[1] || "local";
-    setBusy("uninstall");
-    setInstallSteps([]);
-    try {
-      const res = await fetch(`/api/lifecycle/host/${hostId}/uninstall`, {
-        method: "POST",
-        credentials: "include",
-      });
-      const reader = res.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        let buffer = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            try {
-              const msg = JSON.parse(line.slice(6));
-              if (msg.done !== undefined) break;
-              setInstallSteps((prev) => {
-                const idx = prev.findIndex((s) => s.step === msg.step);
-                if (idx >= 0) { const next = [...prev]; next[idx] = msg; return next; }
-                return [...prev, msg];
-              });
-            } catch { /* ignore */ }
-          }
-        }
-      }
-      await fetchVersions();
-    } finally { setBusy(""); }
-  };
 
   const toggleLogs = async () => {
     if (showLogs) { setShowLogs(false); return; }
@@ -1490,52 +1418,10 @@ function ControlTab({ inst }: { inst: InstanceInfo }) {
               {versions?.node?.version || (versions ? t("instance.control.notFound") : "...")}
             </p>
           </div>
-          {versions?.openclaw?.distTags && (
-            <div className="ml-auto flex items-center gap-2">
-              <select
-                value={installVersion}
-                onChange={(e) => setInstallVersion(e.target.value)}
-                className="bg-s2 border border-edge rounded px-2 py-1.5 text-sm text-ink"
-              >
-                {Object.entries(versions.openclaw.distTags as Record<string, string>)
-                  .sort(([a], [b]) => a === "latest" ? -1 : b === "latest" ? 1 : a.localeCompare(b))
-                  .map(([tag, ver]) => (
-                  <option key={tag} value={ver}>
-                    {tag === "latest" ? `${ver} (stable)` : `${ver} (${tag})`}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={doInstall}
-                disabled={!!busy || (versions?.openclaw?.installed === installVersion)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded bg-brand/20 text-brand hover:bg-brand/30 disabled:opacity-40"
-              >
-                {(versions?.openclaw?.installed || inst.version) ? <><ArrowUpCircle size={14} /> {t("instance.control.upgrade")}</> : <><Download size={14} /> {t("instance.control.install")}</>}
-              </button>
-              {(versions?.openclaw?.installed || inst.version) && (
-                <button
-                  onClick={() => setConfirmUninstall(true)}
-                  disabled={!!busy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded bg-danger/20 text-danger hover:bg-danger/30 disabled:opacity-40"
-                >
-                  <Trash2 size={14} /> {t("instance.control.uninstall")}
-                </button>
-              )}
-            </div>
+          {versions?.openclaw?.latest && versions.openclaw.installed !== versions.openclaw.latest && (
+            <p className="ml-auto text-xs text-ink-3">{t("instance.control.upgradeInSettings")}</p>
           )}
         </div>
-        {installSteps.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-edge space-y-1">
-            {installSteps.map((s, i) => (
-              <div key={i} className="flex items-start gap-1.5 text-xs">
-                <span className="shrink-0">{s.status === "running" ? "⏳" : s.status === "done" ? "✅" : s.status === "error" ? "❌" : "⏭️"}</span>
-                <span className={s.status === "error" ? "text-danger" : s.status === "done" ? "text-ok" : "text-ink-2"}>
-                  {s.step}{s.detail ? ` — ${s.detail}` : ""}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Config Editor */}
@@ -1685,18 +1571,6 @@ function ControlTab({ inst }: { inst: InstanceInfo }) {
         )}
       </div>
 
-      {confirmUninstall && (
-        <ConfirmDialog
-          title={t("instance.control.uninstallConfirmTitle")}
-          message={t("instance.control.uninstallConfirmMsg")}
-          confirmLabel={t("instance.control.uninstall")}
-          onConfirm={async () => {
-            setConfirmUninstall(false);
-            await doUninstall();
-          }}
-          onCancel={() => setConfirmUninstall(false)}
-        />
-      )}
     </div>
   );
 }
@@ -1710,6 +1584,13 @@ function ChannelsTab({ inst }: { inst: InstanceInfo }) {
   const [editValues, setEditValues] = useState<ChannelFormValues | null>(null);
   const [saving, setSaving] = useState(false);
   const [showRestartDialog, setShowRestartDialog] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createType, setCreateType] = useState("");
+  const [createAccount, setCreateAccount] = useState<Record<string, string>>({ accountId: "default", dmPolicy: "open", groupPolicy: "open" });
+  const [createBindAgents, setCreateBindAgents] = useState<string[]>([]);
+  const [createSteps, setCreateSteps] = useState<{ step: string; status: string; detail?: string }[]>([]);
+  const [createRunning, setCreateRunning] = useState(false);
+  const [createDone, setCreateDone] = useState<boolean | null>(null);
 
   useEffect(() => { loadChannels(); }, [inst.id]);
 
@@ -1792,6 +1673,86 @@ function ChannelsTab({ inst }: { inst: InstanceInfo }) {
     }
   }
 
+  const CHANNEL_TYPES = [
+    { id: "feishu", label: "Feishu/Lark", fields: ["appId", "appSecret"], optional: ["domain", "connectionMode"] },
+    { id: "telegram", label: "Telegram", fields: ["botToken"], optional: [] },
+    { id: "slack", label: "Slack", fields: ["botToken", "appToken"], optional: [] },
+    { id: "discord", label: "Discord", fields: ["botToken"], optional: [] },
+  ];
+
+  const agents: { id: string; name?: string }[] = inst.agents || [];
+  const selectedTypeDef = CHANNEL_TYPES.find((ct) => ct.id === createType);
+
+  async function handleCreate() {
+    if (!createType || !selectedTypeDef) return;
+    setCreateRunning(true);
+    setCreateSteps([]);
+    setCreateDone(null);
+
+    try {
+      const res = await fetch(`/api/lifecycle/${inst.id}/channels/create`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: createType,
+          account: createAccount,
+          bindAgentIds: createBindAgents,
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const msg = JSON.parse(line.slice(6));
+            if (msg.done !== undefined) {
+              setCreateDone(msg.success);
+              if (msg.success) {
+                loadChannels();
+                setTimeout(() => { setShowCreate(false); setCreateSteps([]); setCreateDone(null); setCreateType(""); }, 2000);
+              }
+            } else {
+              setCreateSteps((prev) => {
+                const idx = prev.findIndex((s) => s.step === msg.step);
+                if (idx >= 0) { const next = [...prev]; next[idx] = msg; return next; }
+                return [...prev, msg];
+              });
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    } catch (err: any) {
+      setCreateSteps((prev) => [...prev, { step: "Connection", status: "error", detail: err.message }]);
+      setCreateDone(false);
+    }
+    setCreateRunning(false);
+  }
+
+  function resetCreate() {
+    setCreateSteps([]);
+    setCreateDone(null);
+    setCreateAccount({ accountId: "default", dmPolicy: "open", groupPolicy: "open" });
+    setCreateBindAgents([]);
+  }
+
+  const CREATE_STEP_ICON: Record<string, string> = {
+    running: "\u23F3",
+    done: "\u2705",
+    error: "\u274C",
+    skipped: "\u23ED\uFE0F",
+  };
+
   const configChannels = (inst.config as any)?.parsed?.channels || {};
 
   if (loading) return <div className="text-ink-3 text-sm p-4">{t("channels.loadingChannels")}</div>;
@@ -1801,15 +1762,207 @@ function ChannelsTab({ inst }: { inst: InstanceInfo }) {
       {/* Header with probe button */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-ink">{t("channels.title")}</h3>
-        <button
-          onClick={handleProbe}
-          disabled={probing}
-          className="flex items-center gap-1.5 text-sm text-ink-2 hover:text-ink"
-        >
-          <Search size={14} className={probing ? "animate-spin" : ""} />
-          {probing ? t("channels.probing") : t("channels.probe")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowCreate(true); resetCreate(); }}
+            className="flex items-center gap-1 px-3 py-1.5 bg-brand hover:bg-brand-light rounded-lg text-sm text-white"
+          >
+            <Plus size={14} /> {t("instance.channelCreate.addChannel")}
+          </button>
+          <button
+            onClick={handleProbe}
+            disabled={probing}
+            className="flex items-center gap-1.5 text-sm text-ink-2 hover:text-ink"
+          >
+            <Search size={14} className={probing ? "animate-spin" : ""} />
+            {probing ? t("channels.probing") : t("channels.probe")}
+          </button>
+        </div>
       </div>
+
+      {/* Inline channel creation form */}
+      {showCreate && (
+        <div className="bg-s1 border border-edge rounded-card shadow-card p-4 space-y-4">
+          {/* Channel type selector */}
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1">{t("instance.channelCreate.channelType")}</label>
+            <select
+              value={createType}
+              onChange={(e) => { setCreateType(e.target.value); setCreateAccount({ accountId: "default", dmPolicy: "open", groupPolicy: "open" }); }}
+              className="w-full px-3 py-2 rounded-lg bg-s2 border border-edge text-ink text-sm"
+            >
+              <option value="">{t("instance.channelCreate.selectType")}</option>
+              {CHANNEL_TYPES.map((ct) => (
+                <option key={ct.id} value={ct.id}>{ct.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Dynamic fields for selected type */}
+          {selectedTypeDef && (
+            <>
+              {/* Account ID */}
+              <div>
+                <label className="block text-sm font-medium text-ink mb-1">{t("instance.channelCreate.accountId")}</label>
+                <input
+                  type="text"
+                  value={createAccount.accountId || ""}
+                  onChange={(e) => setCreateAccount((prev) => ({ ...prev, accountId: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-s2 border border-edge text-ink text-sm"
+                />
+              </div>
+
+              {/* Required fields */}
+              {selectedTypeDef.fields.map((field) => (
+                <div key={field}>
+                  <label className="block text-sm font-medium text-ink mb-1">
+                    {t(`instance.channelCreate.${field}` as any)}
+                  </label>
+                  <input
+                    type={field.toLowerCase().includes("secret") || field.toLowerCase().includes("token") ? "password" : "text"}
+                    value={createAccount[field] || ""}
+                    onChange={(e) => setCreateAccount((prev) => ({ ...prev, [field]: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-s2 border border-edge text-ink text-sm"
+                    placeholder={field}
+                  />
+                </div>
+              ))}
+
+              {/* Feishu-specific optional fields */}
+              {createType === "feishu" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-ink mb-1">{t("instance.channelCreate.domain")}</label>
+                    <select
+                      value={createAccount.domain || ""}
+                      onChange={(e) => setCreateAccount((prev) => ({ ...prev, domain: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg bg-s2 border border-edge text-ink text-sm"
+                    >
+                      <option value="">feishu (default)</option>
+                      <option value="feishu">feishu</option>
+                      <option value="lark">lark</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink mb-1">{t("instance.channelCreate.connectionMode")}</label>
+                    <select
+                      value={createAccount.connectionMode || ""}
+                      onChange={(e) => setCreateAccount((prev) => ({ ...prev, connectionMode: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg bg-s2 border border-edge text-ink text-sm"
+                    >
+                      <option value="">websocket (default)</option>
+                      <option value="websocket">websocket</option>
+                      <option value="webhook">webhook</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Policies */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">{t("instance.channelCreate.dmPolicy")}</label>
+                  <select
+                    value={createAccount.dmPolicy || "open"}
+                    onChange={(e) => setCreateAccount((prev) => ({ ...prev, dmPolicy: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-s2 border border-edge text-ink text-sm"
+                  >
+                    <option value="open">open</option>
+                    <option value="pairing">pairing</option>
+                    <option value="allowlist">allowlist</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">{t("instance.channelCreate.groupPolicy")}</label>
+                  <select
+                    value={createAccount.groupPolicy || "open"}
+                    onChange={(e) => setCreateAccount((prev) => ({ ...prev, groupPolicy: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-s2 border border-edge text-ink text-sm"
+                  >
+                    <option value="open">open</option>
+                    <option value="allowlist">allowlist</option>
+                    <option value="disabled">disabled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Agent bindings */}
+              {agents.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">{t("instance.channelCreate.bindAgents")}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {agents.map((ag) => (
+                      <label key={ag.id} className="flex items-center gap-1.5 text-sm text-ink cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createBindAgents.includes(ag.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setCreateBindAgents((prev) => [...prev, ag.id]);
+                            else setCreateBindAgents((prev) => prev.filter((id) => id !== ag.id));
+                          }}
+                          className="rounded border-edge"
+                        />
+                        {ag.name || ag.id}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Progress steps */}
+          {createSteps.length > 0 && (
+            <div className="space-y-1">
+              {createSteps.map((s, i) => (
+                <div key={i} className="flex items-start gap-1.5 text-xs">
+                  <span className="shrink-0">{CREATE_STEP_ICON[s.status] || "\u23F3"}</span>
+                  <span className={s.status === "error" ? "text-danger" : s.status === "done" ? "text-ok" : "text-ink-2"}>
+                    {s.step}{s.detail ? ` \u2014 ${s.detail}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Success message */}
+          {createDone === true && (
+            <div className="text-ok text-sm font-medium">{t("instance.channelCreate.success")}</div>
+          )}
+
+          {/* Failure message */}
+          {createDone === false && (
+            <div className="text-danger text-sm font-medium">{t("instance.channelCreate.failed")}</div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            {createDone === false ? (
+              <button
+                onClick={handleCreate}
+                className="px-3 py-1.5 text-sm rounded-lg bg-brand text-white hover:bg-brand-light"
+              >
+                {t("instance.channelCreate.retry")}
+              </button>
+            ) : (
+              <button
+                onClick={handleCreate}
+                disabled={createRunning || !createType || !selectedTypeDef || selectedTypeDef.fields.some((f) => !createAccount[f])}
+                className="px-3 py-1.5 text-sm rounded-lg bg-brand text-white hover:bg-brand-light disabled:opacity-50"
+              >
+                {createRunning ? t("instance.channelCreate.creating") : t("instance.channelCreate.create")}
+              </button>
+            )}
+            <button
+              onClick={() => { setShowCreate(false); setCreateSteps([]); setCreateDone(null); setCreateType(""); }}
+              disabled={createRunning}
+              className="px-3 py-1.5 text-sm rounded-lg bg-s2 border border-edge text-ink hover:bg-s3 disabled:opacity-50"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {channels.length === 0 && <p className="text-ink-3 text-sm">{t("channels.noChannelsConfigured")}</p>}
 
@@ -1832,7 +1985,9 @@ function ChannelsTab({ inst }: { inst: InstanceInfo }) {
               <div className="flex items-center gap-2">
                 <Radio size={16} className="text-ink-3" />
                 <span className="font-semibold text-ink">{ch.label || ch.type}</span>
-                <span className="text-ink-3 text-xs">{ch.type}</span>
+                {(ch.label || ch.type).toLowerCase() !== ch.type.toLowerCase() && (
+                  <span className="text-ink-3 text-xs">{ch.type}</span>
+                )}
               </div>
               <div className="flex items-center gap-3 text-xs">
                 <span className="text-ink-2">{ch.accounts.length} {t("channels.account")}{ch.accounts.length !== 1 ? "s" : ""}</span>
