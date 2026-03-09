@@ -90,6 +90,12 @@ export function createChannelConfig(
   };
   if (input.dmPolicy) chConfig.dmPolicy = input.dmPolicy;
   if (input.groupPolicy) chConfig.groupPolicy = input.groupPolicy;
+  // OpenClaw requires allowFrom at channel level when dmPolicy is open
+  if (input.dmPolicy === "open") {
+    chConfig.allowFrom = input.allowFrom?.length ? input.allowFrom : ["*"];
+  } else if (input.allowFrom?.length) {
+    chConfig.allowFrom = input.allowFrom;
+  }
 
   result.channels[channel] = chConfig;
 

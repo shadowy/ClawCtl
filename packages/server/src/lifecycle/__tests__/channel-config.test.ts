@@ -160,7 +160,7 @@ describe("createChannelConfig", () => {
     expect(result.bindings).toHaveLength(1);
   });
 
-  it("auto-adds allowFrom ['*'] when dmPolicy is open", () => {
+  it("auto-adds allowFrom ['*'] at both account and channel level when dmPolicy is open", () => {
     const config = { channels: {} };
     const result = createChannelConfig(config, "telegram", {
       accountId: "tgbot",
@@ -168,9 +168,10 @@ describe("createChannelConfig", () => {
       dmPolicy: "open",
     }, []);
     expect(result.channels.telegram.accounts.tgbot.allowFrom).toEqual(["*"]);
+    expect(result.channels.telegram.allowFrom).toEqual(["*"]);
   });
 
-  it("does not override allowFrom when dmPolicy is open but allowFrom provided", () => {
+  it("uses provided allowFrom at both account and channel level when dmPolicy is open", () => {
     const config = { channels: {} };
     const result = createChannelConfig(config, "telegram", {
       accountId: "tgbot",
@@ -179,6 +180,7 @@ describe("createChannelConfig", () => {
       allowFrom: ["user1"],
     }, []);
     expect(result.channels.telegram.accounts.tgbot.allowFrom).toEqual(["user1"]);
+    expect(result.channels.telegram.allowFrom).toEqual(["user1"]);
   });
 
   it("sets dmPolicy and groupPolicy on the channel level", () => {
