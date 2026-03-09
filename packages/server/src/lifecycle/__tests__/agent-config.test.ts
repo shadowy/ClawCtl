@@ -12,7 +12,6 @@ const SAMPLE_CONFIG = {
       {
         id: "main",
         model: { primary: "claude-sonnet-4-5-20250514" },
-        thinkingDefault: "brief",
         tools: {
           allow: ["read", "search", "exec"],
           exec: { security: "allowlist", host: "localhost", ask: true, applyPatch: { workspaceOnly: true } },
@@ -80,7 +79,8 @@ describe("mergeAgentConfig", () => {
     });
     const main = result.agents.list.find((a: any) => a.id === "main");
     expect(main.model.primary).toBe("gpt-4o");
-    expect(main.thinkingDefault).toBe("full");
+    // thinkingDefault should NOT be on individual agents (only agents.defaults)
+    expect(main.thinkingDefault).toBeUndefined();
     expect(main.tools.allow).toEqual(["read"]);
     expect(main.tools.exec.security).toBe("full");
     expect(main.tools.exec.applyPatch.workspaceOnly).toBe(false);

@@ -143,11 +143,8 @@ export function mergeAgentConfig(config: any, payload: AgentConfigPayload): any 
       } else {
         delete existing.model;
       }
-      if (input.thinkingDefault) {
-        existing.thinkingDefault = input.thinkingDefault;
-      } else {
-        delete existing.thinkingDefault;
-      }
+      // thinkingDefault is only valid at agents.defaults level, not per-agent
+      delete existing.thinkingDefault;
       if (input.workspace) {
         existing.workspace = input.workspace;
       } else {
@@ -167,7 +164,7 @@ export function mergeAgentConfig(config: any, payload: AgentConfigPayload): any 
     }
     const entry: any = { id: input.id };
     if (input.model) entry.model = { primary: input.model };
-    if (input.thinkingDefault) entry.thinkingDefault = input.thinkingDefault;
+    // thinkingDefault is only valid at agents.defaults level, not per-agent
     if (input.workspace) entry.workspace = input.workspace;
     const tools: any = { allow: input.toolsAllow };
     if (input.execSecurity) {
