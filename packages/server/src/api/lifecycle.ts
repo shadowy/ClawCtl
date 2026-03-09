@@ -858,6 +858,52 @@ WantedBy=default.target`;
     return c.json({ deleted });
   });
 
+  // --- Doctor / Repair ---
+
+  app.post("/:id/doctor", async (c) => {
+    const id = c.req.param("id");
+    if (!manager.get(id)) return c.json({ error: "instance not found" }, 404);
+    const exec = getExecutor(id, hostStore);
+
+    c.header("Content-Type", "text/event-stream");
+    c.header("Cache-Control", "no-cache");
+
+    return stream(c, async (s) => {
+      const emit = async (step: { step: string; status: string; detail?: string }) => {
+        await s.write(`data: ${JSON.stringify(step)}\n\n`);
+      };
+
+      let success = false;
+      try {
+        await emit({ step: "Starting doctor", status: "running", detail: "Running openclaw doctor --repair --non-interactive..." });
+
+        // Run openclaw doctor --repair --non-interactive, streaming output line by line
+        const profile = profileFromInstanceId(id);
+        const profileFlag = profile && profile !== "default" ? ` --profile ${profile}` : "";
+        const cmd = `openclaw${profileFlag} doctor --repair --non-interactive 2>&1`;
+
+        let output = "";
+        for await (const chunk of exec.execStream(cmd)) {
+          output += chunk;
+          await emit({ step: "Doctor output", status: "running", detail: chunk.trim() });
+        }
+
+        // Check if the output suggests success (no "FAIL" or "error" in final lines)
+        const lower = output.toLowerCase();
+        success = !lower.includes("fatal") && !lower.includes("error:");
+        if (success) {
+          await emit({ step: "Doctor complete", status: "ok", detail: "Repair completed successfully" });
+        } else {
+          await emit({ step: "Doctor complete", status: "error", detail: "Doctor found issues that may need manual attention" });
+        }
+      } catch (err: any) {
+        await emit({ step: "Doctor error", status: "error", detail: err.message?.slice(0, 300) || "Unknown error" });
+      }
+      auditLog(db, c, "lifecycle.doctor", `${success ? "Doctor repair completed" : "Doctor repair failed"}`, id);
+      await s.write(`data: ${JSON.stringify({ done: true, success })}\n\n`);
+    });
+  });
+
   // --- Diagnose ---
 
   app.post("/host/:hostId/diagnose", async (c) => {

@@ -466,7 +466,13 @@
       "uninstallConfirmTitle": "卸载 OpenClaw",
       "uninstallConfirmMsg": "这将停止所有运行中的进程、禁用 systemd 服务，并从主机移除 openclaw npm 包。配置文件将被保留。",
       "checkingInstall": "正在检查安装状态...",
-      "upgradeInSettings": "有新版本可用，请在主机设置中升级。"
+      "upgradeInSettings": "有新版本可用，请在主机设置中升级。",
+      "doctorTitle": "诊断修复",
+      "doctorRun": "运行诊断",
+      "doctorRunning": "运行中...",
+      "doctorDesc": "运行 OpenClaw 内置诊断工具，自动检测并修复常见的配置问题。",
+      "doctorOk": "诊断完成 — 未发现问题或已全部修复。",
+      "doctorFailed": "诊断发现问题，可能需要手动处理。"
     },
     "channelCreate": {
       "addChannel": "添加渠道",

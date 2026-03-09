@@ -466,7 +466,13 @@
       "uninstallConfirmTitle": "Uninstall OpenClaw",
       "uninstallConfirmMsg": "This will stop all running processes, disable systemd services, and remove the openclaw npm package from the host. Configuration files will be preserved.",
       "checkingInstall": "Checking installation status...",
-      "upgradeInSettings": "New version available. Upgrade in host settings."
+      "upgradeInSettings": "New version available. Upgrade in host settings.",
+      "doctorTitle": "Doctor / Repair",
+      "doctorRun": "Run Doctor",
+      "doctorRunning": "Running...",
+      "doctorDesc": "Run OpenClaw's built-in diagnostic tool to detect and auto-repair common configuration issues.",
+      "doctorOk": "Doctor completed — no issues found or all issues repaired.",
+      "doctorFailed": "Doctor found issues that may need manual attention."
     },
     "channelCreate": {
       "addChannel": "Add Channel",

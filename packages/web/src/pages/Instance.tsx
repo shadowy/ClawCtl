@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { ChevronLeft, RefreshCw, ArrowUpDown, Play, Square, RotateCcw, Save, Terminal, Camera, GitCompare, Trash2, Users, Plus, Radio, LogOut, Search } from "lucide-react";
+import { ChevronLeft, RefreshCw, ArrowUpDown, Play, Square, RotateCcw, Save, Terminal, Camera, GitCompare, Trash2, Users, Plus, Radio, LogOut, Search, Stethoscope } from "lucide-react";
 import { useInstances, type InstanceInfo } from "../hooks/useInstances";
 import { get, post, put } from "../lib/api";
 import { del } from "../lib/api";
@@ -1220,6 +1220,50 @@ function ControlTab({ inst }: { inst: InstanceInfo }) {
   const [diffResult, setDiffResult] = useState<any>(null);
   const [diffIds, setDiffIds] = useState<[number|null, number|null]>([null, null]);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [doctorOutput, setDoctorOutput] = useState<string[]>([]);
+  const [doctorRunning, setDoctorRunning] = useState(false);
+  const [doctorSuccess, setDoctorSuccess] = useState<boolean | null>(null);
+  const doctorRef = useRef<HTMLDivElement>(null);
+
+  const runDoctor = async () => {
+    setDoctorRunning(true);
+    setDoctorOutput([]);
+    setDoctorSuccess(null);
+    try {
+      const res = await fetch(`/api/lifecycle/${inst.id}/doctor`, { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        setDoctorOutput([`Error: ${(err as any).error || res.statusText}`]);
+        setDoctorSuccess(false);
+        setDoctorRunning(false);
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value);
+        const lines = text.split("\n").filter(l => l.startsWith("data: "));
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.done) {
+              setDoctorSuccess(data.success);
+            } else if (data.detail) {
+              setDoctorOutput(prev => [...prev, data.detail]);
+              doctorRef.current?.scrollTo(0, doctorRef.current.scrollHeight);
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch (err: any) {
+      setDoctorOutput(prev => [...prev, `Connection error: ${err.message}`]);
+      setDoctorSuccess(false);
+    }
+    setDoctorRunning(false);
+  };
 
   const fetchStatus = async () => {
     try {
@@ -1422,6 +1466,31 @@ function ControlTab({ inst }: { inst: InstanceInfo }) {
             <p className="ml-auto text-xs text-ink-3">{t("instance.control.upgradeInSettings")}</p>
           )}
         </div>
+      </div>
+
+      {/* Doctor / Repair */}
+      <div className="bg-s1 border border-edge rounded-card p-4 shadow-card">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">{t("instance.control.doctorTitle")}</h3>
+          <button
+            onClick={runDoctor}
+            disabled={doctorRunning}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded bg-brand/20 text-brand hover:bg-brand/30 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Stethoscope size={14} /> {doctorRunning ? t("instance.control.doctorRunning") : t("instance.control.doctorRun")}
+          </button>
+        </div>
+        <p className="text-xs text-ink-3 mb-3">{t("instance.control.doctorDesc")}</p>
+        {doctorOutput.length > 0 && (
+          <div ref={doctorRef} className="h-48 overflow-auto bg-deep rounded p-3 font-mono text-xs text-ink-2 whitespace-pre-wrap">
+            {doctorOutput.map((line, i) => <div key={i}>{line}</div>)}
+          </div>
+        )}
+        {doctorSuccess !== null && (
+          <p className={`mt-2 text-sm font-medium ${doctorSuccess ? "text-ok" : "text-danger"}`}>
+            {doctorSuccess ? t("instance.control.doctorOk") : t("instance.control.doctorFailed")}
+          </p>
+        )}
       </div>
 
       {/* Config Editor */}

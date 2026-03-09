@@ -298,36 +298,86 @@ export async function streamInstall(
   }
   await emit({ step: "Verify installation", status: "done", detail: `v${verify.stdout.trim()}` });
 
-  // Step 6: Update OPENCLAW_SERVICE_VERSION in systemd unit files and restart services
+  // Step 6: Check systemd availability
   const newVersion = verify.stdout.trim();
-  await emit({ step: "Restart services", status: "running" });
+  const hasSystemd = (await exec.exec("command -v systemctl >/dev/null 2>&1 && echo yes")).stdout.trim() === "yes";
 
-  // Find unit files and update version env var
+  if (!hasSystemd) {
+    await emit({ step: "Setup service", status: "skipped", detail: "systemd not available" });
+    return true;
+  }
+
+  // Step 7: Find existing gateway services
+  await emit({ step: "Check services", status: "running" });
   const unitDir = "$HOME/.config/systemd/user";
   const findUnits = await exec.exec(`ls ${unitDir}/openclaw-gateway*.service 2>/dev/null; true`);
   const unitFiles = findUnits.stdout.trim().split("\n").filter((f) => f.endsWith(".service"));
+
   if (unitFiles.length > 0) {
+    // Upgrade path: update version in existing unit files and restart
+    await emit({ step: "Check services", status: "done", detail: `${unitFiles.length} service(s) found` });
+
+    await emit({ step: "Update services", status: "running" });
     for (const uf of unitFiles) {
       await exec.exec(`sed -i 's/OPENCLAW_SERVICE_VERSION=[^ ]*/OPENCLAW_SERVICE_VERSION=${newVersion}/' '${uf}' 2>/dev/null; true`);
+      // Also update Description line
+      await exec.exec(`sed -i 's/\\(Description=OpenClaw Gateway.*v\\)[^ )]*\\(.*\\)/\\1${newVersion}\\2/' '${uf}' 2>/dev/null; true`);
     }
     await exec.exec("systemctl --user daemon-reload 2>/dev/null; true");
-  }
+    await emit({ step: "Update services", status: "done", detail: `Updated to v${newVersion}` });
 
-  // Restart running gateway services
-  const listUnits = await exec.exec("systemctl --user list-units 'openclaw-gateway*' --no-pager --plain --no-legend 2>/dev/null");
-  const units = listUnits.stdout.trim().split("\n")
-    .map((line) => line.trim().split(/\s+/)[0])
-    .filter((u) => u && u.startsWith("openclaw-gateway") && u.endsWith(".service"));
-  if (units.length > 0) {
-    let restarted = 0;
-    for (const unit of units) {
-      const r2 = await exec.exec(`systemctl --user restart ${unit} 2>&1`);
-      if (r2.exitCode === 0) restarted++;
-      else await emit({ step: "Restart services", status: "running", detail: `Failed to restart ${unit}` });
+    // Restart running services
+    await emit({ step: "Restart services", status: "running" });
+    const listUnits = await exec.exec("systemctl --user list-units 'openclaw-gateway*' --no-pager --plain --no-legend 2>/dev/null");
+    const units = listUnits.stdout.trim().split("\n")
+      .map((line) => line.trim().split(/\s+/)[0])
+      .filter((u) => u && u.startsWith("openclaw-gateway") && u.endsWith(".service"));
+    if (units.length > 0) {
+      let restarted = 0;
+      for (const unit of units) {
+        const r2 = await exec.exec(`systemctl --user restart ${unit} 2>&1`);
+        if (r2.exitCode === 0) restarted++;
+        else await emit({ step: "Restart services", status: "running", detail: `Failed to restart ${unit}` });
+      }
+      await emit({ step: "Restart services", status: "done", detail: `${restarted}/${units.length} services restarted` });
+    } else {
+      await emit({ step: "Restart services", status: "done", detail: "No active services to restart" });
     }
-    await emit({ step: "Restart services", status: "done", detail: `${restarted}/${units.length} services restarted` });
   } else {
-    await emit({ step: "Restart services", status: "done", detail: "No running services found" });
+    // Fresh install: use `openclaw gateway install` to create systemd service
+    await emit({ step: "Check services", status: "done", detail: "No existing services" });
+
+    await emit({ step: "Setup gateway service", status: "running", detail: "Creating systemd service..." });
+
+    // Find an available port (default 18789)
+    const portCheck = await exec.exec("ss -ltnp 2>/dev/null | grep ':18789 ' || true");
+    const port = portCheck.stdout.trim() ? 18889 : 18789;
+
+    const installR = await execLong(exec, `openclaw gateway install --port ${port} --json 2>&1`, 60_000);
+    if (installR.exitCode !== 0) {
+      await emit({ step: "Setup gateway service", status: "error", detail: (installR.stderr || installR.stdout).slice(0, 200) });
+      // Non-fatal: install succeeded, just no systemd service
+      return true;
+    }
+    await emit({ step: "Setup gateway service", status: "done", detail: `Port ${port}` });
+
+    // Enable linger so service survives SSH logout
+    await emit({ step: "Enable linger", status: "running" });
+    const lingerR = await exec.exec("loginctl enable-linger $(whoami) 2>&1; true");
+    if (lingerR.exitCode === 0) {
+      await emit({ step: "Enable linger", status: "done" });
+    } else {
+      await emit({ step: "Enable linger", status: "skipped", detail: "loginctl not available" });
+    }
+
+    // Start the service
+    await emit({ step: "Start gateway", status: "running" });
+    const startR = await exec.exec("systemctl --user start openclaw-gateway.service 2>&1");
+    if (startR.exitCode === 0) {
+      await emit({ step: "Start gateway", status: "done", detail: `Running on port ${port}` });
+    } else {
+      await emit({ step: "Start gateway", status: "error", detail: startR.stdout.slice(0, 200) });
+    }
   }
 
   return true;
