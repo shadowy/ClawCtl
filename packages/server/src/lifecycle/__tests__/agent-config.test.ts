@@ -36,16 +36,21 @@ describe("extractModels", () => {
   it("returns unique models from defaults + agents + common list", () => {
     const result = extractModels(SAMPLE_CONFIG);
     expect(result.defaultModel).toBe("gpt-4o");
+    // Config models (without prefix) are included
     expect(result.models).toContain("gpt-4o");
     expect(result.models).toContain("claude-sonnet-4-5-20250514");
     expect(result.models).toContain("gpt-4o-mini");
-    expect(result.models).toContain("claude-haiku-4-5-20251001");
+    // Preset models use provider/ prefix
+    expect(result.models).toContain("anthropic/claude-haiku-4-5-20251001");
     const unique = new Set(result.models);
     expect(unique.size).toBe(result.models.length);
     // Grouped models include known providers
     expect(result.modelsByProvider).toHaveProperty("openai");
     expect(result.modelsByProvider).toHaveProperty("anthropic");
-    expect(result.modelsByProvider.anthropic).toContain("claude-sonnet-4-5-20250514");
+    // Config models and preset models both present in groups
+    expect(result.modelsByProvider.anthropic).toContain("anthropic/claude-sonnet-4-6");
+    // Config model without prefix lands in "other" group
+    expect(result.modelsByProvider.other).toContain("claude-sonnet-4-5-20250514");
   });
 
   it("handles missing agents section gracefully", () => {
