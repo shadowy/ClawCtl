@@ -7,7 +7,7 @@ import { requireWrite } from "../auth/middleware.js";
 import { auditLog } from "../audit.js";
 import { getExecutor, getHostExecutor } from "../executor/factory.js";
 import { getProcessStatus, stopProcess, startProcess, restartProcess } from "../lifecycle/service.js";
-import { checkNodeVersion, getVersions, streamInstall, streamUninstall } from "../lifecycle/install.js";
+import { checkNodeVersion, getVersions, streamInstall, streamUninstall, streamChannelCreate } from "../lifecycle/install.js";
 import { readRemoteConfig, writeRemoteConfig, readAuthProfiles, writeAuthProfiles, getConfigDir, profileFromInstanceId } from "../lifecycle/config.js";
 import { SnapshotStore } from "../lifecycle/snapshot.js";
 import { extractModels, mergeAgentConfig, removeAgent } from "../lifecycle/agent-config.js";
@@ -262,6 +262,35 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
     }
   });
 
+  app.post("/:id/channels/create", async (c) => {
+    const id = c.req.param("id");
+    if (!manager.get(id)) return c.json({ error: "instance not found" }, 404);
+    const profile = profileFromInstanceId(id);
+    const configDir = getConfigDir(profile);
+    const exec = getExecutor(id, hostStore);
+    const { channel, account, bindAgentIds } = await c.req.json();
+
+    if (!channel || !account) return c.json({ error: "channel and account required" }, 400);
+
+    c.header("Content-Type", "text/event-stream");
+    c.header("Cache-Control", "no-cache");
+
+    return stream(c, async (s) => {
+      const emit = async (step: { step: string; status: string; detail?: string }) => {
+        await s.write(`data: ${JSON.stringify(step)}\n\n`);
+      };
+
+      let success = false;
+      try {
+        success = await streamChannelCreate(exec, configDir, channel, account, bindAgentIds || [], emit);
+      } catch (err: any) {
+        await emit({ step: "Error", status: "error", detail: err.message?.slice(0, 300) || "Unknown error" });
+      }
+      auditLog(db, c, "lifecycle.channel-create", `${success ? "Created" : "Failed"} ${channel}`, id);
+      await s.write(`data: ${JSON.stringify({ done: true, success })}\n\n`);
+    });
+  });
+
   // --- LLM Provider config (models.providers) ---
 
   // Well-known provider env vars (subset of OpenClaw's PROVIDER_ENV_VARS)
@@ -373,10 +402,19 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
         }
       }
       // Write provider definitions (baseUrl, models) to openclaw.json — but strip apiKey
+      // OpenClaw schema requires both `id` and `name` for each model definition
       const cleanProviders: Record<string, any> = {};
       for (const [name, p] of Object.entries(providers) as [string, any][]) {
         if (p && typeof p === "object") {
           const { apiKey: _, ...rest } = p;
+          if (Array.isArray(rest.models)) {
+            rest.models = rest.models.map((m: any) => {
+              if (m && typeof m === "object" && m.id && !m.name) {
+                return { ...m, name: m.id };
+              }
+              return m;
+            });
+          }
           cleanProviders[name] = rest;
         }
       }

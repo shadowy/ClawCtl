@@ -1,4 +1,6 @@
 import type { CommandExecutor } from "../executor/types.js";
+import { createChannelConfig, CHANNEL_DEFS, type CreateChannelInput } from "./channel-config.js";
+import { readRemoteConfig, writeRemoteConfig } from "./config.js";
 
 const MIN_NODE_MAJOR = 22;
 
@@ -288,11 +290,190 @@ export async function streamInstall(
     await exec.exec(`${sudoPrefix}npm link openclaw 2>/dev/null; ${sudoPrefix}npm rebuild -g openclaw 2>/dev/null`);
     verify = await exec.exec("openclaw --version 2>/dev/null");
   }
-  if (verify.exitCode === 0 && verify.stdout.trim()) {
-    await emit({ step: "Verify installation", status: "done", detail: `v${verify.stdout.trim()}` });
-    return true;
+  if (verify.exitCode !== 0 || !verify.stdout.trim()) {
+    await emit({ step: "Verify installation", status: "error", detail: "openclaw command not found after install" });
+    return false;
+  }
+  await emit({ step: "Verify installation", status: "done", detail: `v${verify.stdout.trim()}` });
+
+  // Step 6: Update OPENCLAW_SERVICE_VERSION in systemd unit files and restart services
+  const newVersion = verify.stdout.trim();
+  await emit({ step: "Restart services", status: "running" });
+
+  // Find unit files and update version env var
+  const unitDir = "$HOME/.config/systemd/user";
+  const findUnits = await exec.exec(`ls ${unitDir}/openclaw-gateway*.service 2>/dev/null; true`);
+  const unitFiles = findUnits.stdout.trim().split("\n").filter((f) => f.endsWith(".service"));
+  if (unitFiles.length > 0) {
+    for (const uf of unitFiles) {
+      await exec.exec(`sed -i 's/OPENCLAW_SERVICE_VERSION=[^ ]*/OPENCLAW_SERVICE_VERSION=${newVersion}/' '${uf}' 2>/dev/null; true`);
+    }
+    await exec.exec("systemctl --user daemon-reload 2>/dev/null; true");
   }
 
-  await emit({ step: "Verify installation", status: "error", detail: "openclaw command not found after install" });
-  return false;
+  // Restart running gateway services
+  const listUnits = await exec.exec("systemctl --user list-units 'openclaw-gateway*' --no-pager --plain --no-legend 2>/dev/null");
+  const units = listUnits.stdout.trim().split("\n")
+    .map((line) => line.trim().split(/\s+/)[0])
+    .filter((u) => u && u.startsWith("openclaw-gateway") && u.endsWith(".service"));
+  if (units.length > 0) {
+    let restarted = 0;
+    for (const unit of units) {
+      const r2 = await exec.exec(`systemctl --user restart ${unit} 2>&1`);
+      if (r2.exitCode === 0) restarted++;
+      else await emit({ step: "Restart services", status: "running", detail: `Failed to restart ${unit}` });
+    }
+    await emit({ step: "Restart services", status: "done", detail: `${restarted}/${units.length} services restarted` });
+  } else {
+    await emit({ step: "Restart services", status: "done", detail: "No running services found" });
+  }
+
+  return true;
+}
+
+// --- Channel creation with SSE progress ---
+
+async function rollback(exec: CommandExecutor, backupPath: string, configDir: string): Promise<void> {
+  await exec.exec(`cp "${backupPath}" "${configDir}/openclaw.json" 2>/dev/null; rm -f "${backupPath}"`);
+}
+
+export async function streamChannelCreate(
+  exec: CommandExecutor,
+  configDir: string,
+  channel: string,
+  input: CreateChannelInput,
+  bindAgentIds: string[],
+  emit: EmitFn,
+): Promise<boolean> {
+  const backupPath = `${configDir}/openclaw.json.channel-bak`;
+
+  // Step 1: Validate
+  await emit({ step: "Validate", status: "running" });
+  const def = CHANNEL_DEFS[channel];
+  if (!def) {
+    await emit({ step: "Validate", status: "error", detail: `Unknown channel type: ${channel}` });
+    return false;
+  }
+  const missing = def.requiredFields.filter((f) => !(input as any)[f]);
+  if (missing.length > 0) {
+    await emit({ step: "Validate", status: "error", detail: `Missing required fields: ${missing.join(", ")}` });
+    return false;
+  }
+  await emit({ step: "Validate", status: "done", detail: `${def.label} channel` });
+
+  // Step 2: Backup config
+  await emit({ step: "Backup config", status: "running" });
+  const cpR = await exec.exec(`cp "${configDir}/openclaw.json" "${backupPath}"`);
+  if (cpR.exitCode !== 0) {
+    await emit({ step: "Backup config", status: "error", detail: "Failed to backup openclaw.json" });
+    return false;
+  }
+  await emit({ step: "Backup config", status: "done" });
+
+  // Step 3: Check dependencies
+  const needsDeps = !!(def.extensionDir && def.depCheckPath);
+  if (needsDeps) {
+    await emit({ step: "Check dependencies", status: "running" });
+    // Find openclaw install dir
+    const whichR = await exec.exec("readlink -f $(which openclaw) 2>/dev/null");
+    if (whichR.exitCode !== 0 || !whichR.stdout.trim()) {
+      await emit({ step: "Check dependencies", status: "error", detail: "Cannot locate openclaw installation" });
+      await rollback(exec, backupPath, configDir);
+      return false;
+    }
+    // Strip /dist/... or /bin/... to get install root
+    const clawBin = whichR.stdout.trim();
+    const installDir = clawBin.replace(/\/(dist|bin)\/.*$/, "");
+    const extDir = `${installDir}/${def.extensionDir}`;
+    const depCheck = await exec.exec(`test -d "${extDir}/node_modules/${def.depCheckPath}" && echo yes`);
+    const depsInstalled = depCheck.stdout.trim() === "yes";
+
+    if (depsInstalled) {
+      await emit({ step: "Check dependencies", status: "done", detail: "Already installed" });
+    } else {
+      // Step 4: Install dependencies
+      await emit({ step: "Install dependencies", status: "running" });
+      const lockFile = `/tmp/openclaw-channel-install-${channel}.lock`;
+      const lockCheck = await exec.exec(`test -f "${lockFile}" && echo locked`);
+      if (lockCheck.stdout.trim() === "locked") {
+        await emit({ step: "Install dependencies", status: "error", detail: "Another install is already in progress" });
+        await rollback(exec, backupPath, configDir);
+        return false;
+      }
+
+      const hasSudo = (await exec.exec("command -v sudo >/dev/null 2>&1 && echo yes")).stdout.trim() === "yes";
+      const prefix = hasSudo ? "sudo " : "";
+      const installCmd = `touch "${lockFile}" && cd "${extDir}" && ${prefix}npm install && rm -f "${lockFile}"`;
+      const installR = await execLong(exec, installCmd, 180_000);
+      if (installR.exitCode !== 0) {
+        await exec.exec(`rm -f "${lockFile}"`);
+        await emit({ step: "Install dependencies", status: "error", detail: (installR.stderr || installR.stdout).slice(0, 200) });
+        await rollback(exec, backupPath, configDir);
+        return false;
+      }
+      await emit({ step: "Install dependencies", status: "done" });
+    }
+  } else {
+    await emit({ step: "Check dependencies", status: "skipped", detail: "Built-in channel" });
+  }
+
+  // Step 5: Write config
+  await emit({ step: "Write config", status: "running" });
+  try {
+    const config = await readRemoteConfig(exec, configDir);
+    const updated = createChannelConfig(config, channel, input, bindAgentIds);
+    await writeRemoteConfig(exec, configDir, updated);
+    await emit({ step: "Write config", status: "done" });
+  } catch (err: any) {
+    await emit({ step: "Write config", status: "error", detail: err.message?.slice(0, 200) });
+    await rollback(exec, backupPath, configDir);
+    return false;
+  }
+
+  // Step 6: Restart gateway
+  await emit({ step: "Restart gateway", status: "running" });
+  // Find the gateway port from config or default
+  const portR = await exec.exec(
+    `grep -o '"port"[[:space:]]*:[[:space:]]*[0-9]*' "${configDir}/openclaw.json" | head -1 | grep -o '[0-9]*$'; true`,
+  );
+  const port = portR.stdout.trim() || "3010";
+
+  // Kill existing process on this port
+  await exec.exec(`pkill -f "openclaw.*gateway.*--port[= ]${port}" 2>/dev/null; true`);
+  // Also try lsof-based kill for any leftover
+  await exec.exec(`lsof -ti:${port} | xargs kill -9 2>/dev/null; true`);
+  // Brief pause to let port free up
+  await new Promise((r) => setTimeout(r, 1000));
+
+  // Start gateway via nohup
+  const logFile = `${configDir}/gateway.log`;
+  const profileSuffix = configDir.includes("-") ? configDir.replace(/.*\.openclaw-?/, "") : "";
+  const envPrefix = profileSuffix ? `OPENCLAW_PROFILE=${profileSuffix} ` : "";
+  await exec.exec(
+    `nohup bash -c '${envPrefix}openclaw gateway --port ${port}' >> "${logFile}" 2>&1 &`,
+  );
+  await emit({ step: "Restart gateway", status: "done", detail: `Port ${port}` });
+
+  // Step 7: Verify channel
+  await emit({ step: "Verify channel", status: "running" });
+  await new Promise((r) => setTimeout(r, 5000));
+  const tailR = await exec.exec(`tail -50 "${logFile}" 2>/dev/null`);
+  const logTail = tailR.stdout || "";
+
+  if (logTail.includes("error") && logTail.includes(channel)) {
+    await emit({ step: "Verify channel", status: "error", detail: `Gateway log indicates ${channel} channel error` });
+    return false;
+  }
+
+  // Check if gateway is listening
+  const listenCheck = await exec.exec(`lsof -i:${port} -sTCP:LISTEN 2>/dev/null | grep -q LISTEN && echo up; true`);
+  if (listenCheck.stdout.trim() === "up") {
+    await emit({ step: "Verify channel", status: "done", detail: "Gateway is running" });
+  } else {
+    await emit({ step: "Verify channel", status: "done", detail: "Gateway started (could not confirm listener)" });
+  }
+
+  // Cleanup backup on success
+  await exec.exec(`rm -f "${backupPath}"`);
+  return true;
 }
