@@ -394,6 +394,7 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
 
       for (const agentId of agentIds) {
         const profiles = await readAuthProfiles(exec, configDir, agentId);
+        if (!profiles.version) profiles.version = 1;
         if (!profiles.profiles) profiles.profiles = {};
         profiles.profiles["openai-codex:default"] = oauthProfile;
         await writeAuthProfiles(exec, configDir, agentId, profiles);

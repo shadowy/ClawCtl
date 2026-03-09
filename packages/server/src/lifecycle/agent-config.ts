@@ -118,13 +118,13 @@ export function mergeAgentConfig(config: any, payload: AgentConfigPayload): any 
       if (!existing.tools) existing.tools = {};
       existing.tools.allow = input.toolsAllow;
       if (input.execSecurity) {
-        if (!existing.tools.exec) existing.tools.exec = {};
-        existing.tools.exec.security = input.execSecurity;
-        if (!existing.tools.exec.applyPatch) existing.tools.exec.applyPatch = {};
-        existing.tools.exec.applyPatch.workspaceOnly = input.workspaceOnly;
+        existing.tools.exec = {
+          ...existing.tools.exec,
+          security: input.execSecurity,
+          applyPatch: { ...existing.tools.exec?.applyPatch, workspaceOnly: input.workspaceOnly },
+        };
       }
-      if (!existing.tools.fs) existing.tools.fs = {};
-      existing.tools.fs.workspaceOnly = input.fsWorkspaceOnly;
+      existing.tools.fs = { ...existing.tools.fs, workspaceOnly: input.fsWorkspaceOnly };
       return existing;
     }
     const entry: any = { id: input.id };
