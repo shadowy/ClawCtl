@@ -456,7 +456,13 @@ function AgentsTab({ inst, initialAgentId, onSwitchTab }: { inst: InstanceInfo; 
     if (values.id !== selectedId) setSelectedId(values.id);
   };
 
+  const noLlm = models.length === 0 && Object.keys(modelsByProvider).length === 0;
+
   const addNewAgent = () => {
+    if (noLlm) {
+      setError(t("instance.agents.noLlmConfigured"));
+      return;
+    }
     const newAgent: AgentFormValues = {
       id: "",
       model: "",
@@ -534,7 +540,6 @@ function AgentsTab({ inst, initialAgentId, onSwitchTab }: { inst: InstanceInfo; 
   }
 
   // Guide user to configure LLM first if no agents and no models available
-  const noLlm = models.length === 0 && Object.keys(modelsByProvider).length === 0;
   if (agents.length === 0 && noLlm) {
     return (
       <div className="flex flex-col items-center py-16 text-ink-3">
