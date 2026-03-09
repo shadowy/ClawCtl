@@ -385,7 +385,10 @@
       "deleteAgentConfirm": "删除智能体「{{id}}」？同时会移除关联的绑定。",
       "agentIdRequired": "智能体 ID 不能为空",
       "duplicateIds": "检测到重复的智能体 ID",
-      "loadingAgentConfig": "正在从远程加载智能体配置..."
+      "loadingAgentConfig": "正在从远程加载智能体配置...",
+      "noLlmConfigured": "尚未配置 LLM 供应商",
+      "noLlmHint": "请先配置 LLM 供应商（API Key），然后再创建智能体",
+      "goToLlm": "配置 LLM 供应商"
     },
     "llm": {
       "llmProviders": "大模型提供商",

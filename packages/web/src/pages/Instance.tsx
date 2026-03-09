@@ -396,7 +396,7 @@ function SecurityTab({ inst }: { inst: InstanceInfo }) {
   );
 }
 
-function AgentsTab({ inst, initialAgentId }: { inst: InstanceInfo; initialAgentId?: string }) {
+function AgentsTab({ inst, initialAgentId, onSwitchTab }: { inst: InstanceInfo; initialAgentId?: string; onSwitchTab?: (tab: Tab) => void }) {
   const { t } = useTranslation();
   const [models, setModels] = useState<string[]>([]);
   const [modelsByProvider, setModelsByProvider] = useState<Record<string, string[]>>({});
@@ -529,6 +529,26 @@ function AgentsTab({ inst, initialAgentId }: { inst: InstanceInfo; initialAgentI
     return (
       <div className="flex items-center justify-center py-20 text-ink-3 text-sm">
         <RefreshCw size={16} className="animate-spin mr-2" /> {t("instance.agents.loadingAgentConfig")}
+      </div>
+    );
+  }
+
+  // Guide user to configure LLM first if no agents and no models available
+  const noLlm = models.length === 0 && Object.keys(modelsByProvider).length === 0;
+  if (agents.length === 0 && noLlm) {
+    return (
+      <div className="flex flex-col items-center py-16 text-ink-3">
+        <Users size={32} className="mb-3 opacity-40" />
+        <p className="text-sm mb-1">{t("instance.agents.noLlmConfigured")}</p>
+        <p className="text-xs mb-4 text-ink-3">{t("instance.agents.noLlmHint")}</p>
+        {onSwitchTab && (
+          <button
+            onClick={() => onSwitchTab("llm")}
+            className="px-4 py-2 bg-brand text-white rounded text-sm hover:bg-brand/90 transition-colors"
+          >
+            {t("instance.agents.goToLlm")}
+          </button>
+        )}
       </div>
     );
   }
@@ -2009,7 +2029,7 @@ export function Instance() {
           {activeTab === "sessions" && <SessionsTab inst={inst} />}
           {activeTab === "config" && <ConfigTab inst={inst} />}
           {activeTab === "security" && <SecurityTab inst={inst} />}
-          {activeTab === "agents" && <AgentsTab inst={inst} initialAgentId={searchParams.get("agent") || undefined} />}
+          {activeTab === "agents" && <AgentsTab inst={inst} initialAgentId={searchParams.get("agent") || undefined} onSwitchTab={setActiveTab} />}
           {activeTab === "channels" && <ChannelsTab inst={inst} />}
           {activeTab === "llm" && <LlmTab inst={inst} />}
           {activeTab === "control" && <ControlTab inst={inst} />}

@@ -385,7 +385,10 @@
       "deleteAgentConfirm": "Delete agent \"{{id}}\"? This will also remove associated bindings.",
       "agentIdRequired": "Agent ID is required",
       "duplicateIds": "Duplicate agent IDs detected",
-      "loadingAgentConfig": "Loading agent config from remote..."
+      "loadingAgentConfig": "Loading agent config from remote...",
+      "noLlmConfigured": "No LLM provider configured yet",
+      "noLlmHint": "Configure an LLM provider (API key) before creating agents",
+      "goToLlm": "Configure LLM Provider"
     },
     "llm": {
       "llmProviders": "LLM Providers",
