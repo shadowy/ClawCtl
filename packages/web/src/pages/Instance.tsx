@@ -411,16 +411,20 @@ function AgentsTab({ inst, initialAgentId, onSwitchTab }: { inst: InstanceInfo; 
   const [showRestartDialog, setShowRestartDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasProvider, setHasProvider] = useState(true); // optimistic default
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [cfg, modelData] = await Promise.all([
+      const [cfg, modelData, providerData] = await Promise.all([
         get<any>(`/lifecycle/${inst.id}/config-file`),
         get<{ models: string[]; modelsByProvider: Record<string, string[]>; defaultModel: string }>(`/lifecycle/${inst.id}/models`),
+        get<{ providers: Record<string, any>; detectedProviders?: { name: string }[] }>(`/lifecycle/${inst.id}/providers`).catch(() => null),
       ]);
       setModels(modelData.models);
       setModelsByProvider(modelData.modelsByProvider || {});
+      const provCount = Object.keys(providerData?.providers || {}).length + (providerData?.detectedProviders?.length || 0);
+      setHasProvider(provCount > 0);
 
       const agentsSection = cfg?.agents || {};
       const defaults = agentsSection.defaults || {};
@@ -456,7 +460,7 @@ function AgentsTab({ inst, initialAgentId, onSwitchTab }: { inst: InstanceInfo; 
     if (values.id !== selectedId) setSelectedId(values.id);
   };
 
-  const noLlm = models.length === 0 && Object.keys(modelsByProvider).length === 0;
+  const noLlm = !hasProvider;
 
   const addNewAgent = () => {
     if (noLlm) {
