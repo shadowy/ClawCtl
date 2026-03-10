@@ -21,6 +21,7 @@ import { monitoringRoutes } from "./api/monitoring.js";
 import { hostRoutes } from "./api/hosts.js";
 import { lifecycleRoutes } from "./api/lifecycle.js";
 import { assistantRoutes } from "./api/assistant.js";
+import { skillRoutes } from "./api/skills.js";
 import { HostStore } from "./hosts/store.js";
 import { discoverRemoteInstances } from "./hosts/discovery.js";
 import { ensureTunnel, closeAllTunnels } from "./hosts/tunnel.js";
@@ -87,6 +88,9 @@ app.route("/api/lifecycle", lifecycleRoutes(hostStore, manager, db));
 
 // AI Assistant — chat with tool calling for config management
 app.route("/api/assistant", assistantRoutes(hostStore, manager, llm, db));
+
+// Skills — catalog, templates, install/uninstall
+app.route("/api/skills", skillRoutes(db, manager));
 
 // Serve frontend in production
 app.use("/*", serveStatic({ root: "../web/dist" }));

@@ -30,7 +30,7 @@ export const ROLE_PERMISSIONS: Record<Role, { read: string[]; write: string[] }>
   },
   operator: {
     read: ["*"],
-    write: ["instances", "config", "tools", "operations", "digest", "sessions", "lifecycle", "security"],
+    write: ["instances", "config", "tools", "operations", "digest", "sessions", "lifecycle", "security", "skills"],
   },
   auditor: {
     read: ["*"],
