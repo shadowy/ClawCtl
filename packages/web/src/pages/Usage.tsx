@@ -23,10 +23,10 @@ export function Usage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [pricing, setPricing] = useState<Record<string, { input: number; output: number }>>({});
+  const [pricing, setPricing] = useState<Record<string, { input: number; output: number; cacheRead?: number; cacheWrite?: number }>>({});
 
   useEffect(() => {
-    get<{ models: Record<string, { input: number; output: number }> }>("/lifecycle/pricing/models")
+    get<{ models: Record<string, { input: number; output: number; cacheRead?: number; cacheWrite?: number }> }>("/lifecycle/pricing/models")
       .then((r) => setPricing(r.models || {}))
       .catch(() => { /* ignore */ });
   }, []);
@@ -34,10 +34,13 @@ export function Usage() {
   const connectedInstances = instances.filter((i) => i.connection.status === "connected");
 
   /** Estimate cost in USD for a model using LiteLLM pricing (per 1M tokens) */
-  const lookupCost = (model: string, inputTokens: number, outputTokens: number): number | null => {
+  const lookupCost = (model: string, inputTokens: number, outputTokens: number, cacheRead = 0, cacheWrite = 0): number | null => {
     if (!model || Object.keys(pricing).length === 0) return null;
-    const calc = (p: { input: number; output: number }) =>
-      (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
+    const calc = (p: { input: number; output: number; cacheRead?: number; cacheWrite?: number }) => {
+      const cr = p.cacheRead ?? p.input;  // fallback to input cost
+      const cw = p.cacheWrite ?? p.input;
+      return (inputTokens * p.input + outputTokens * p.output + cacheRead * cr + cacheWrite * cw) / 1_000_000;
+    };
 
     // 1. Exact match
     if (pricing[model]) return calc(pricing[model]);
@@ -119,7 +122,7 @@ export function Usage() {
       let instCost = 0;
       let hasCost = false;
       for (const s of sessions) {
-        const c = lookupCost(s.model || "", s.inputTokens || 0, s.outputTokens || 0);
+        const c = lookupCost(s.model || "", s.inputTokens || 0, s.outputTokens || 0, s.cacheRead || 0, s.cacheWrite || 0);
         if (c !== null) { instCost += c; hasCost = true; }
       }
 

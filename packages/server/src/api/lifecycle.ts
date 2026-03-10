@@ -31,13 +31,16 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
   app.get("/pricing/models", async (c) => {
     try {
       const pricing = await fetchPricing();
-      const models: Record<string, { input: number; output: number }> = {};
+      const models: Record<string, { input: number; output: number; cacheRead?: number; cacheWrite?: number }> = {};
       for (const [key, val] of Object.entries(pricing)) {
         if (val.input_cost_per_token && val.output_cost_per_token) {
-          models[key] = {
+          const m: typeof models[string] = {
             input: val.input_cost_per_token * 1_000_000,
             output: val.output_cost_per_token * 1_000_000,
           };
+          if (val.cache_read_input_token_cost) m.cacheRead = val.cache_read_input_token_cost * 1_000_000;
+          if (val.cache_creation_input_token_cost) m.cacheWrite = val.cache_creation_input_token_cost * 1_000_000;
+          models[key] = m;
         }
       }
       return c.json({ models, count: Object.keys(models).length });

@@ -14,7 +14,7 @@ export interface InstanceInfo {
   health?: { status: string; version?: string };
   agents: { id: string; name?: string; model?: string; thinking?: string; toolsAllow?: string[]; execSecurity?: { security?: string; host?: string; ask?: string; workspaceOnly?: boolean }; isDefault?: boolean }[];
   channels: { type: string; accountId?: string; enabled: boolean; running: boolean }[];
-  sessions: { key: string; kind: string; model?: string; displayName?: string; alias?: string; channel?: string; updatedAt?: number; inputTokens?: number; outputTokens?: number; totalTokens?: number }[];
+  sessions: { key: string; kind: string; model?: string; displayName?: string; alias?: string; channel?: string; updatedAt?: number; inputTokens?: number; outputTokens?: number; totalTokens?: number; cacheRead?: number; cacheWrite?: number }[];
   skills: { name: string; status: string; description?: string }[];
   config?: Record<string, unknown>;
   securityAudit?: { level: string; title: string; detail: string; fix?: string }[];
