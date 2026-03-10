@@ -36,29 +36,39 @@ export function Usage() {
   /** Estimate cost in USD for a model using LiteLLM pricing (per 1M tokens) */
   const lookupCost = (model: string, inputTokens: number, outputTokens: number): number | null => {
     if (!model || Object.keys(pricing).length === 0) return null;
-    // Try exact match, then with provider prefix, then model name only
-    const tryKeys = [model];
+    const calc = (p: { input: number; output: number }) =>
+      (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
+
+    // 1. Exact match
+    if (pricing[model]) return calc(pricing[model]);
+
+    // 2. Split provider/model if present
     const parts = model.split("/");
+    const providerPart = parts[0];
+    const modelName = parts.length > 1 ? parts.slice(1).join("/") : model;
+
+    // 3. Try model name alone (handles bare names like "gpt-5.4")
+    if (parts.length > 1 && pricing[modelName]) return calc(pricing[modelName]);
+
+    // 4. Try provider prefix mappings
+    const providerMap: Record<string, string[]> = {
+      "openai-codex": ["openai/", ""], openai: ["openai/", ""], anthropic: ["anthropic/", ""],
+      google: ["gemini/", "google/", ""], deepseek: ["deepseek/", ""],
+      moonshot: ["moonshot/", "azure_ai/", ""], qwen: ["qwen/", ""], zhipu: ["zhipu/", ""],
+    };
     if (parts.length > 1) {
-      tryKeys.push(parts.slice(1).join("/"));
-      // Map OpenClaw prefixes to LiteLLM
-      const providerMap: Record<string, string[]> = {
-        "openai-codex": ["openai/"], openai: ["openai/"], anthropic: ["anthropic/"],
-        google: ["gemini/", "google/"], deepseek: ["deepseek/"],
-      };
-      for (const p of providerMap[parts[0]] || [`${parts[0]}/`]) {
-        tryKeys.push(p + parts.slice(1).join("/"));
+      for (const pfx of providerMap[providerPart] || [`${providerPart}/`, ""]) {
+        const key = pfx + modelName;
+        if (pricing[key]) return calc(pricing[key]);
       }
     }
-    for (const key of tryKeys) {
-      const p = pricing[key];
-      if (p) return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
-      // Case-insensitive fallback
-      const lower = key.toLowerCase();
-      for (const [k, v] of Object.entries(pricing)) {
-        if (k.toLowerCase() === lower) return (inputTokens * v.input + outputTokens * v.output) / 1_000_000;
-      }
+
+    // 5. Case-insensitive match
+    const lower = model.toLowerCase();
+    for (const [k, v] of Object.entries(pricing)) {
+      if (k.toLowerCase() === lower) return calc(v);
     }
+
     return null;
   };
 

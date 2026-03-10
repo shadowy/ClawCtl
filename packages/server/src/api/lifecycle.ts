@@ -27,6 +27,25 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
   // All lifecycle writes require "lifecycle" permission (admin + operator, not auditor)
   app.use("*", requireWrite("lifecycle"));
 
+  // --- Pricing data (for frontend display) --- must be before /:id routes
+  app.get("/pricing/models", async (c) => {
+    try {
+      const pricing = await fetchPricing();
+      const models: Record<string, { input: number; output: number }> = {};
+      for (const [key, val] of Object.entries(pricing)) {
+        if (val.input_cost_per_token && val.output_cost_per_token) {
+          models[key] = {
+            input: val.input_cost_per_token * 1_000_000,
+            output: val.output_cost_per_token * 1_000_000,
+          };
+        }
+      }
+      return c.json({ models, count: Object.keys(models).length });
+    } catch (err: any) {
+      return c.json({ error: err.message }, 500);
+    }
+  });
+
   // --- Service control ---
 
   app.get("/:id/status", async (c) => {
@@ -1020,27 +1039,6 @@ WantedBy=default.target`;
         oldestSession: oldest === Infinity ? null : oldest,
         newestSession: newest || null,
       });
-    } catch (err: any) {
-      return c.json({ error: err.message }, 500);
-    }
-  });
-
-  // --- Pricing data (for frontend display) ---
-
-  app.get("/pricing/models", async (c) => {
-    try {
-      const pricing = await fetchPricing();
-      // Return a subset: only models with pricing data, trimmed for frontend
-      const models: Record<string, { input: number; output: number }> = {};
-      for (const [key, val] of Object.entries(pricing)) {
-        if (val.input_cost_per_token && val.output_cost_per_token) {
-          models[key] = {
-            input: val.input_cost_per_token * 1_000_000,  // convert to per-1M tokens
-            output: val.output_cost_per_token * 1_000_000,
-          };
-        }
-      }
-      return c.json({ models, count: Object.keys(models).length });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }
