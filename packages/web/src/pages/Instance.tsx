@@ -891,13 +891,14 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
           {quotas.map((q, qi) => (
             <div key={qi} className="bg-s1 border border-edge rounded-card p-4 shadow-card">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">{t("instance.llm.quota")}</h3>
-                <span className="text-xs text-ink-3">{q.provider}{q.plan ? ` (${q.plan})` : ""}</span>
+                <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">{q.displayName || q.provider}</h3>
+                <span className="text-xs text-ink-3">{q.plan || ""}</span>
               </div>
               {q.error ? (
                 <p className="text-xs text-danger">{q.error}</p>
               ) : (
                 <div className="space-y-3">
+                  {/* Rate limit windows (Codex) */}
                   {q.windows?.map((w: any, wi: number) => {
                     const remaining = 100 - (w.usedPercent || 0);
                     const resetDate = w.resetAt ? new Date(w.resetAt) : null;
@@ -919,8 +920,14 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
                       </div>
                     );
                   })}
-                  {q.credits != null && (
-                    <p className="text-xs text-ink-2">{t("instance.llm.credits")}: ${q.credits.toFixed(2)}</p>
+                  {/* Balance (API key providers: DeepSeek, Moonshot, Zhipu) */}
+                  {q.balance != null && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-ink-2">{t("instance.llm.balance")}</span>
+                      <span className={`text-sm font-semibold ${q.balance > 10 ? "text-ok" : q.balance > 1 ? "text-warn" : "text-danger"}`}>
+                        {q.currency === "CNY" ? "¥" : "$"}{q.balance.toFixed(2)}
+                      </span>
+                    </div>
                   )}
                 </div>
               )}

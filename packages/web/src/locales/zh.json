@@ -440,6 +440,7 @@
       "costEstimate": "预估费用",
       "sessionCount": "会话",
       "unmatchedModels": "{{count}} 个模型无计费数据",
+      "balance": "余额",
       "loadingQuota": "加载额度与费用数据..."
     },
     "control": {

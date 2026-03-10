@@ -14,7 +14,7 @@ import { extractModels, mergeAgentConfig, removeAgent } from "../lifecycle/agent
 import { mergeChannelAccountConfig, deleteChannelConfig } from "../lifecycle/channel-config.js";
 import { getOAuthStatus, clearOAuthFlow } from "../llm/openai-oauth.js";
 import { fetchPricing, estimateCost } from "../pricing/litellm.js";
-import { fetchCodexQuotaViaSSH } from "../pricing/codex-quota.js";
+import { fetchCodexQuota, getApiKeyFetcher } from "../pricing/codex-quota.js";
 
 const VERSION_CACHE_TTL = 60_000; // 60s
 const versionCache = new Map<string, { data: any; time: number }>();
@@ -916,23 +916,46 @@ WantedBy=default.target`;
     const exec = getExecutor(id, hostStore);
 
     try {
-      // Read auth profiles to find OAuth tokens
       const config = await readRemoteConfig(exec, configDir);
       const agentList: any[] = config?.agents?.list || [];
       const agentId = agentList[0]?.id || "main";
       const profiles = await readAuthProfiles(exec, configDir, agentId);
 
       const results: any[] = [];
+      const seen = new Set<string>();
+
+      // 1) OAuth providers (Codex)
       for (const [key, cred] of Object.entries(profiles.profiles || {}) as [string, any][]) {
         if (cred.type === "oauth" && cred.access) {
+          const provider = cred.provider || key.split(":")[0];
+          if (seen.has(provider)) continue;
+          seen.add(provider);
           try {
-            const quota = await fetchCodexQuotaViaSSH(exec, cred.access, cred.accountId);
-            results.push({ profileKey: key, provider: cred.provider || key.split(":")[0], ...quota });
+            const quota = await fetchCodexQuota(exec, cred.access, cred.accountId);
+            results.push({ profileKey: key, ...quota });
           } catch (err: any) {
-            results.push({ profileKey: key, provider: cred.provider || key.split(":")[0], windows: [], error: err.message });
+            results.push({ profileKey: key, provider, displayName: provider, windows: [], error: err.message });
           }
         }
       }
+
+      // 2) API-key providers with balance APIs (DeepSeek, Moonshot, Zhipu)
+      for (const [key, cred] of Object.entries(profiles.profiles || {}) as [string, any][]) {
+        if (cred.type === "api_key" && cred.key) {
+          const provider = cred.provider || key.split(":")[0];
+          if (seen.has(provider)) continue;
+          const fetcher = getApiKeyFetcher(provider);
+          if (!fetcher) continue;
+          seen.add(provider);
+          try {
+            const quota = await fetcher(exec, cred.key);
+            results.push({ profileKey: key, ...quota });
+          } catch (err: any) {
+            results.push({ profileKey: key, provider, displayName: provider, windows: [], error: err.message });
+          }
+        }
+      }
+
       return c.json({ quotas: results });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);

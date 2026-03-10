@@ -440,6 +440,7 @@
       "costEstimate": "Estimated Cost",
       "sessionCount": "sessions",
       "unmatchedModels": "{{count}} model(s) without pricing data",
+      "balance": "Balance",
       "loadingQuota": "Loading quota & cost data..."
     },
     "control": {
