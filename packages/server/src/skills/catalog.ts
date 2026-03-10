@@ -1,12 +1,19 @@
+export const SKILL_CATEGORIES = [
+  "dev", "social", "productivity", "creative",
+  "communication", "iot", "utility", "ai",
+] as const;
+export type SkillCategory = (typeof SKILL_CATEGORIES)[number];
+
 export interface SkillCatalogEntry {
   name: string;
   description: string;
   source: "bundled" | "clawhub";
   emoji?: string;
-  category: string;
+  category: SkillCategory;
   tags: string[];
   author?: string;
   downloads?: number;
+  homepage?: string;
   requires?: { bins?: string[]; env?: string[]; os?: string[] };
 }
 
@@ -512,7 +519,12 @@ export function getAllTags(): string[] {
   return Array.from(tagSet).sort();
 }
 
-/** Filter catalog by tag, category, or search query (name/description match). */
+/** Returns all skill categories. */
+export function getAllCategories(): readonly string[] {
+  return SKILL_CATEGORIES;
+}
+
+/** Filter catalog by tag, category, or search query (name/description/tags match). */
 export function filterCatalog(opts: {
   tag?: string;
   category?: string;
@@ -528,7 +540,8 @@ export function filterCatalog(opts: {
     if (lowerQuery) {
       const inName = entry.name.toLowerCase().includes(lowerQuery);
       const inDesc = entry.description.toLowerCase().includes(lowerQuery);
-      if (!inName && !inDesc) continue;
+      const inTags = entry.tags.some(t => t.toLowerCase().includes(lowerQuery));
+      if (!inName && !inDesc && !inTags) continue;
     }
     results.push(entry as SkillCatalogEntry);
   }

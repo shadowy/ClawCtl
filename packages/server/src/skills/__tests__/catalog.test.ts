@@ -5,7 +5,6 @@ import {
   filterCatalog,
   searchClawHub,
 } from "../catalog.js";
-import type { SkillCatalogEntry } from "../catalog.js";
 
 describe("getBundledCatalog()", () => {
   it("returns exactly 52 entries", () => {
