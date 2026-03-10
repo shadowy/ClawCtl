@@ -62,7 +62,8 @@ export function skillRoutes(db: Database.Database, manager: InstanceManager) {
 
   // POST /templates — create a custom template
   app.post("/templates", requireWrite("skills"), async (c) => {
-    const body = await c.req.json();
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
     const { id, name, name_zh, description, description_zh, icon, skills, sort_order } = body;
 
     if (!id || !name || !name_zh || !description || !description_zh) {
@@ -101,7 +102,8 @@ export function skillRoutes(db: Database.Database, manager: InstanceManager) {
   // PUT /templates/:id — update template
   app.put("/templates/:id", requireWrite("skills"), async (c) => {
     const id = c.req.param("id");
-    const body = await c.req.json();
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
     const existing = db
       .prepare("SELECT id FROM skill_templates WHERE id = ?")
@@ -156,7 +158,8 @@ export function skillRoutes(db: Database.Database, manager: InstanceManager) {
 
   // POST /install — install skills to agents on remote instances
   app.post("/install", requireWrite("skills"), async (c) => {
-    const body = await c.req.json();
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
     const { skills, targets } = body;
 
     // Validate request body
@@ -201,7 +204,8 @@ export function skillRoutes(db: Database.Database, manager: InstanceManager) {
 
   // DELETE /uninstall — remove skills from agents
   app.delete("/uninstall", requireWrite("skills"), async (c) => {
-    const body = await c.req.json();
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
     const { skills, targets } = body;
 
     // Validate request body
