@@ -50,6 +50,20 @@ export function initDb(): Database.Database {
       alias TEXT NOT NULL,
       PRIMARY KEY (instance_id, session_key)
     );
+
+    CREATE TABLE IF NOT EXISTS skill_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      name_zh TEXT NOT NULL,
+      description TEXT NOT NULL,
+      description_zh TEXT NOT NULL,
+      icon TEXT DEFAULT '',
+      skills TEXT NOT NULL DEFAULT '[]',
+      builtin INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // Migrations

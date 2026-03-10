@@ -26,8 +26,10 @@ import { discoverRemoteInstances } from "./hosts/discovery.js";
 import { ensureTunnel, closeAllTunnels } from "./hosts/tunnel.js";
 import type { LlmConfig } from "./llm/types.js";
 import { fetchPricing } from "./pricing/litellm.js";
+import { seedTemplates } from "./skills/templates-seed.js";
 
 const db = initDb();
+seedTemplates(db);
 const manager = new InstanceManager(db);
 const llm = new LlmClient();
 const userStore = new UserStore(db);
