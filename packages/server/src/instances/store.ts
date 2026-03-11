@@ -64,6 +64,19 @@ export function initDb(): Database.Database {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS provider_keys (
+      instance_id TEXT NOT NULL,
+      profile_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      key_masked TEXT,
+      status TEXT DEFAULT 'unknown',
+      checked_at TEXT,
+      error_message TEXT,
+      email TEXT,
+      account_info TEXT,
+      PRIMARY KEY (instance_id, profile_id)
+    );
   `);
 
   // Migrations
