@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { ChevronLeft, RefreshCw, ArrowUpDown, Play, Square, RotateCcw, Save, Terminal, Camera, GitCompare, Trash2, Users, Plus, Radio, LogOut, Search, Stethoscope, ShieldAlert } from "lucide-react";
@@ -738,6 +738,32 @@ function detectPreset(name: string, baseUrl: string): string {
   return "custom";
 }
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
+  return String(n);
+}
+
+function formatTimeUntil(epochMs: number): string {
+  const diff = epochMs - Date.now();
+  if (diff <= 0) return "0m";
+  const hours = Math.floor(diff / 3600_000);
+  if (hours < 1) return `${Math.floor(diff / 60_000)}m`;
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+function formatTimeAgo(isoDate: string, t: (k: string, o?: any) => string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return t("models.keys.lastChecked", { time: "<1m" });
+  if (mins < 60) return t("models.keys.lastChecked", { time: `${mins}m` });
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return t("models.keys.lastChecked", { time: `${hours}h` });
+  const days = Math.floor(hours / 24);
+  return t("models.keys.lastChecked", { time: `${days}d` });
+}
+
 function LlmTab({ inst }: { inst: InstanceInfo }) {
   const { t } = useTranslation();
   const [providers, setProviders] = useState<Record<string, any>>({});
@@ -763,6 +789,21 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
   const [quotas, setQuotas] = useState<any[]>([]);
   const [costEstimate, setCostEstimate] = useState<{ totalCost: number; byModel: Record<string, any>; matched: number; unmatched: number; sessionCount?: number; oldestSession?: number; newestSession?: number } | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(false);
+
+  // Key management state
+  const [keys, setKeys] = useState<{
+    profileId: string; provider: string; type: string;
+    keyMasked: string; status: string; checkedAt: string | null;
+    errorMessage: string | null; email: string | null;
+    expiresAt: number | null;
+  }[]>([]);
+  const [keysLoading, setKeysLoading] = useState(false);
+  const [verifyingKey, setVerifyingKey] = useState<string | null>(null);
+  const [addKeyProvider, setAddKeyProvider] = useState<string | null>(null);
+  const [newKeyValue, setNewKeyValue] = useState("");
+  const [addKeyError, setAddKeyError] = useState<string | null>(null);
+  const [addingKey, setAddingKey] = useState(false);
+  const [providerUsage, setProviderUsage] = useState<Record<string, { tokens: number; cost: number }>>({});
 
   const fetchQuota = async () => {
     setQuotaLoading(true);
@@ -791,6 +832,84 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
   };
 
   useEffect(() => { fetchProviders(); fetchQuota(); }, [inst.id]);
+
+  // Compute per-provider usage from existing cost estimate data
+  useEffect(() => {
+    if (!costEstimate?.byModel) return;
+    const usage: Record<string, { tokens: number; cost: number }> = {};
+    for (const [modelKey, m] of Object.entries(costEstimate.byModel) as [string, any][]) {
+      const provider = modelKey.split("/")[0] || "other";
+      if (!usage[provider]) usage[provider] = { tokens: 0, cost: 0 };
+      usage[provider].tokens += (m.inputTokens || 0) + (m.outputTokens || 0);
+      usage[provider].cost += m.cost || 0;
+    }
+    setProviderUsage(usage);
+  }, [costEstimate]);
+
+  const fetchKeys = useCallback(async () => {
+    setKeysLoading(true);
+    try {
+      const data = await get<{ keys: typeof keys }>(`/lifecycle/${inst.id}/keys`);
+      setKeys(data.keys || []);
+    } catch { /* ignore */ }
+    setKeysLoading(false);
+  }, [inst.id]);
+
+  // Fetch keys when tab mounts + trigger background refresh
+  useEffect(() => {
+    fetchKeys();
+    let pollTimer: ReturnType<typeof setInterval>;
+    post<{ refreshing: number }>(`/lifecycle/${inst.id}/keys/refresh`).then((r) => {
+      if (r.refreshing > 0) {
+        let polls = 0;
+        pollTimer = setInterval(async () => {
+          await fetchKeys();
+          polls++;
+          if (polls >= 10) clearInterval(pollTimer);
+        }, 3000);
+      }
+    }).catch(() => {});
+    return () => { if (pollTimer) clearInterval(pollTimer); };
+  }, [inst.id, fetchKeys]);
+
+  const handleVerifyKey = async (profileId: string) => {
+    setVerifyingKey(profileId);
+    try {
+      await post(`/lifecycle/${inst.id}/keys/${encodeURIComponent(profileId)}/verify`);
+      await fetchKeys();
+    } catch { /* ignore */ }
+    setVerifyingKey(null);
+  };
+
+  const handleDeleteKey = async (profileId: string, keyMasked: string) => {
+    if (!confirm(t("models.keys.deleteConfirm", { key: keyMasked }))) return;
+    try {
+      await del(`/lifecycle/${inst.id}/keys/${encodeURIComponent(profileId)}`);
+      await fetchKeys();
+    } catch { /* ignore */ }
+  };
+
+  const handleAddKey = async (providerName: string) => {
+    if (!newKeyValue.trim()) return;
+    setAddingKey(true);
+    setAddKeyError(null);
+    try {
+      const providerConfig = providers[providerName] || {};
+      await put(`/lifecycle/${inst.id}/providers`, {
+        providers: {
+          ...providers,
+          [providerName]: { ...providerConfig, apiKey: newKeyValue.trim() },
+        },
+      });
+      setNewKeyValue("");
+      setAddKeyProvider(null);
+      await fetchKeys();
+      await fetchProviders();
+    } catch (err: any) {
+      setAddKeyError(err.message || t("models.keys.sshError"));
+    }
+    setAddingKey(false);
+  };
 
   const saveProviders = async (next: Record<string, any>) => {
     setSaving(true);
@@ -1007,36 +1126,123 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
         )}
 
         {(providerNames.length > 0 || detectedProviders.length > 0) && (
-          <div className="divide-y divide-edge">
+          <div className="space-y-4">
             {providerNames.map((name) => {
               const p = providers[name];
               const preset = PROVIDER_PRESETS[name];
               const displayName = preset ? preset.label : name;
-              const maskedKey = p.auth === "oauth"
-                ? (p._oauthExpiresAt && p._oauthExpiresAt < Date.now() ? "OAuth (expired)" : "OAuth")
-                : typeof p.apiKey === "string" && p.apiKey
-                  ? p.apiKey.slice(0, 6) + "..." + p.apiKey.slice(-4)
-                  : typeof p.apiKey === "object" ? `(${p.apiKey?.source || "secret"})` : "—";
+              const provKeys = keys.filter(k => k.provider === name);
               return (
-                <div key={name} className="p-4 flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-ink">{displayName}</span>
-                      {!preset && <span className="font-mono text-xs text-ink-3">({name})</span>}
-                      {p.auth && p.auth !== "api-key" && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-dim text-cyan">{p.auth}</span>
+                <div key={name} className="bg-s1 border border-edge rounded-card overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-edge">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-ink">{displayName}</span>
+                        <span className="text-xs text-ink-3">{p.baseUrl}</span>
+                      </div>
+                      {providerUsage[name] && (
+                        <div className="text-xs text-ink-3 mt-0.5">
+                          {t("models.keys.totalUsage", {
+                            tokens: formatTokens(providerUsage[name].tokens),
+                            cost: `$${providerUsage[name].cost.toFixed(4)}`,
+                          })}
+                        </div>
                       )}
                     </div>
-                    <div className="text-xs text-ink-3 mt-1 flex gap-4">
-                      <span className="truncate">{p.baseUrl || "—"}</span>
-                      <span>{t("instance.llm.key")} {maskedKey}</span>
-                      <span>{(p.models || []).length} {t("instance.llm.model")}{(p.models || []).length !== 1 ? "s" : ""}</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => startEdit(name)}
+                        className="text-xs text-cyan hover:text-cyan/80">{t("common.edit")}</button>
+                      <button onClick={() => deleteProvider(name)}
+                        className="text-xs text-danger hover:text-danger/80">{t("common.delete")}</button>
                     </div>
                   </div>
-                  <button onClick={() => startEdit(name)} className="text-xs text-cyan hover:text-cyan/80 px-2 py-1">{t("common.edit")}</button>
-                  <button onClick={() => deleteProvider(name)} className="text-xs text-danger hover:text-danger/80 px-2 py-1">
-                    <Trash2 size={14} />
-                  </button>
+
+                  {/* Key rows */}
+                  <div className="divide-y divide-edge">
+                    {provKeys.length === 0 && (
+                      <div className="px-4 py-3 text-sm text-ink-3">{t("models.keys.noKeys")}</div>
+                    )}
+                    {provKeys.map(k => (
+                      <div key={k.profileId} className="flex items-center gap-3 px-4 py-2.5">
+                        <code className="text-xs text-ink font-mono">{k.keyMasked}</code>
+                        <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${
+                          k.status === "valid" ? "bg-ok/10 text-ok" :
+                          k.status === "invalid" || k.status === "expired" ? "bg-red-500/10 text-red-500" :
+                          "bg-ink-3/10 text-ink-3"
+                        }`}>
+                          {t(`models.keys.${k.status}`)}
+                        </span>
+                        {k.email && <span className="text-xs text-ink-3">{k.email}</span>}
+                        {k.status === "invalid" && k.errorMessage && (
+                          <span className="text-xs text-red-500">{k.errorMessage}</span>
+                        )}
+                        {k.type === "oauth" && k.expiresAt && (
+                          <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${
+                            k.expiresAt < Date.now() ? "bg-red-500/10 text-red-500" :
+                            k.expiresAt < Date.now() + 86400_000 ? "bg-amber-500/10 text-amber-500" :
+                            "bg-ok/10 text-ok"
+                          }`}>
+                            {k.expiresAt < Date.now()
+                              ? t("models.keys.expired")
+                              : t("models.keys.expiresIn", { time: formatTimeUntil(k.expiresAt) })}
+                          </span>
+                        )}
+                        {k.checkedAt && (
+                          <span className="text-xs text-ink-3 ml-auto">
+                            {formatTimeAgo(k.checkedAt, t)}
+                          </span>
+                        )}
+                        {k.type !== "oauth" && (
+                          <button
+                            onClick={() => handleVerifyKey(k.profileId)}
+                            disabled={verifyingKey === k.profileId}
+                            className="text-ink-3 hover:text-cyan transition-colors disabled:opacity-50"
+                            title={t("models.keys.verify")}>
+                            <RefreshCw size={14} className={verifyingKey === k.profileId ? "animate-spin" : ""} />
+                          </button>
+                        )}
+                        {k.type !== "oauth" && (
+                          <button
+                            onClick={() => handleDeleteKey(k.profileId, k.keyMasked)}
+                            className="text-ink-3 hover:text-danger transition-colors"
+                            title={t("models.keys.deleteKey")}>
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add key button / inline form */}
+                  <div className="px-4 py-2.5 border-t border-edge">
+                    {addKeyProvider === name ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          value={newKeyValue}
+                          onChange={e => setNewKeyValue(e.target.value)}
+                          placeholder={t("models.keys.keyPlaceholder")}
+                          className="flex-1 bg-s2 border border-edge rounded px-3 py-1.5 text-sm text-ink"
+                          autoFocus
+                        />
+                        <button onClick={() => handleAddKey(name)}
+                          disabled={addingKey || !newKeyValue.trim()}
+                          className="text-xs bg-cyan hover:bg-cyan/80 text-white px-3 py-1.5 rounded disabled:opacity-50">
+                          {addingKey ? t("models.keys.verifying") : t("common.save")}
+                        </button>
+                        <button onClick={() => { setAddKeyProvider(null); setNewKeyValue(""); setAddKeyError(null); }}
+                          className="text-xs text-ink-3 hover:text-ink px-2 py-1.5">
+                          {t("common.cancel")}
+                        </button>
+                        {addKeyError && <span className="text-xs text-red-500">{addKeyError}</span>}
+                      </div>
+                    ) : (
+                      <button onClick={() => setAddKeyProvider(name)}
+                        className="text-xs text-cyan hover:text-cyan/80">
+                        + {t("models.keys.addKey")}
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -1044,15 +1250,13 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
               const preset = PROVIDER_PRESETS[dp.name];
               const displayName = preset ? preset.label : dp.name;
               return (
-                <div key={`det-${dp.name}`} className="p-4 flex items-center gap-4 opacity-70">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-ink">{displayName}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-ok/20 text-ok">{t("instance.llm.auto")}</span>
-                    </div>
-                    <div className="text-xs text-ink-3 mt-1">
-                      <code className="bg-s2 px-1 rounded">{dp.source}</code> — {t("instance.llm.managedOnServer")}
-                    </div>
+                <div key={`det-${dp.name}`} className="bg-s1 border border-edge rounded-card overflow-hidden p-4 opacity-70">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-ink">{displayName}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-ok/20 text-ok">{t("instance.llm.auto")}</span>
+                  </div>
+                  <div className="text-xs text-ink-3 mt-1">
+                    <code className="bg-s2 px-1 rounded">{dp.source}</code> — {t("instance.llm.managedOnServer")}
                   </div>
                 </div>
               );
