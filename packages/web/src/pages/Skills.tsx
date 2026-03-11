@@ -737,10 +737,10 @@ function InstalledSkillsView({ instances, catalog, t }: {
                       <span className={`w-2 h-2 rounded-full shrink-0 ${sk.status === "ready" ? "bg-ok" : sk.status === "disabled" ? "bg-ink-3" : "bg-amber-500"}`} />
                       <span className="text-sm text-ink flex-1">{sk.name}</span>
                       {isClawhub && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500">{t("skills.community")}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 whitespace-nowrap">{t("skills.community")}</span>
                       )}
                       {isSuspicious && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 flex items-center gap-1">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 flex items-center gap-1 whitespace-nowrap">
                           <ShieldAlert size={12} />
                           {t("skills.suspiciousWarning")}
                         </span>

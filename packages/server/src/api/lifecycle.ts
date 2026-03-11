@@ -523,6 +523,105 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
     }
   });
 
+  // Sync OAuth tokens from one instance to other instances
+  app.post("/:id/providers/oauth/sync", requireWrite("lifecycle"), async (c) => {
+    const sourceId = c.req.param("id")!;
+    const sourceInst = manager.get(sourceId);
+    if (!sourceInst) return c.json({ error: "Source instance not found" }, 404);
+
+    let body: { targets?: string[] } = {};
+    try { body = await c.req.json(); } catch { /* empty body = sync to same-host siblings */ }
+
+    const sourceProfile = profileFromInstanceId(sourceId);
+    const sourceConfigDir = getConfigDir(sourceProfile);
+    const sourceExec = getExecutor(sourceId, hostStore);
+
+    // 1. Read OAuth token from source instance (use first agent that has one)
+    let oauthProfile: any = null;
+    try {
+      const srcConfig = await readRemoteConfig(sourceExec, sourceConfigDir);
+      const srcAgents: any[] = srcConfig?.agents?.list || [];
+      const srcAgentIds = srcAgents.map((a: any) => a.id);
+      if (srcAgentIds.length === 0) srcAgentIds.push("main");
+
+      for (const agentId of srcAgentIds) {
+        const profiles = await readAuthProfiles(sourceExec, sourceConfigDir, agentId);
+        const ocp = profiles?.profiles?.["openai-codex:default"];
+        if (ocp && ocp.access) {
+          oauthProfile = ocp;
+          break;
+        }
+      }
+    } catch (err: any) {
+      return c.json({ error: `Failed to read source token: ${err.message}` }, 500);
+    }
+
+    if (!oauthProfile) {
+      return c.json({ error: "No OAuth token found on source instance" }, 400);
+    }
+
+    // 2. Resolve target instances
+    let targetIds: string[] = body.targets || [];
+    if (targetIds.length === 0) {
+      // Default: all instances on the same host
+      const sourceHostKey = sourceId.startsWith("local-") ? "local" : sourceId.replace(/-[^-]+$/, "");
+      const all = manager.getAll();
+      targetIds = all
+        .filter((inst) => {
+          const hk = inst.id.startsWith("local-") ? "local" : inst.id.replace(/-[^-]+$/, "");
+          return hk === sourceHostKey && inst.id !== sourceId;
+        })
+        .map((inst) => inst.id);
+    }
+
+    if (targetIds.length === 0) {
+      return c.json({ error: "No target instances found" }, 400);
+    }
+
+    // 3. Write token to each target instance's agents
+    const synced: string[] = [];
+    const errors: { id: string; error: string }[] = [];
+
+    for (const targetId of targetIds) {
+      if (!manager.get(targetId)) {
+        errors.push({ id: targetId, error: "Instance not found" });
+        continue;
+      }
+      try {
+        const tgtProfile = profileFromInstanceId(targetId);
+        const tgtConfigDir = getConfigDir(tgtProfile);
+        const tgtExec = getExecutor(targetId, hostStore);
+
+        const tgtConfig = await readRemoteConfig(tgtExec, tgtConfigDir);
+        const tgtAgents: any[] = tgtConfig?.agents?.list || [];
+        const tgtAgentIds = tgtAgents.map((a: any) => a.id);
+        if (tgtAgentIds.length === 0) tgtAgentIds.push("main");
+
+        for (const agentId of tgtAgentIds) {
+          const profiles = await readAuthProfiles(tgtExec, tgtConfigDir, agentId);
+          if (!profiles.version) profiles.version = 1;
+          if (!profiles.profiles) profiles.profiles = {};
+          profiles.profiles["openai-codex:default"] = oauthProfile;
+          await writeAuthProfiles(tgtExec, tgtConfigDir, agentId, profiles);
+        }
+
+        // Restart the target gateway so it picks up the new token
+        const tgtPort: number = tgtConfig?.gateway?.port || 18789;
+        await restartProcess(tgtExec, tgtConfigDir, tgtPort, tgtProfile === "default" ? undefined : tgtProfile);
+
+        synced.push(targetId);
+      } catch (err: any) {
+        errors.push({ id: targetId, error: err.message });
+      }
+    }
+
+    auditLog(db, c, "lifecycle.providers.oauth.sync",
+      `Synced OAuth from ${sourceId} to ${synced.length} instance(s)${errors.length ? ` (${errors.length} failed)` : ""}`,
+      sourceId);
+
+    return c.json({ ok: errors.length === 0, synced, errors: errors.length ? errors : undefined });
+  });
+
   // --- Available versions (fetched locally, not from remote host) ---
 
   const availableVersionsCache: { data: any; time: number } = { data: null, time: 0 };
