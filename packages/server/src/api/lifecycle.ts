@@ -131,6 +131,76 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
     }
   });
 
+  // SSE-based process action with phased progress
+  app.post("/:id/process-action", async (c) => {
+    const id = c.req.param("id");
+    const inst = manager.get(id);
+    if (!inst) return c.json({ error: "instance not found" }, 404);
+
+    let body: { action?: string } = {};
+    try { body = await c.req.json(); } catch {}
+    const action = body.action;
+    if (!action || !["start", "stop", "restart"].includes(action)) {
+      return c.json({ error: "Invalid action" }, 400);
+    }
+
+    const port = parsePortFromInstance(inst);
+    const profile = profileFromInstanceId(id);
+    const configDir = getConfigDir(profile);
+    const exec = getExecutor(id, hostStore);
+
+    return stream(c, async (s) => {
+      const send = (phase: string, detail?: Record<string, unknown>) =>
+        s.write(`data: ${JSON.stringify({ phase, ...detail })}\n\n`);
+
+      try {
+        if (action === "restart" || action === "stop") {
+          await send("checking");
+          const cur = await getProcessStatus(exec, port);
+
+          if (cur.running && cur.pid) {
+            await send("stopping", { pid: cur.pid });
+            await stopProcess(exec, cur.pid);
+            for (let i = 0; i < 20; i++) {
+              await new Promise((r) => setTimeout(r, 500));
+              const s2 = await getProcessStatus(exec, port);
+              if (!s2.running) break;
+            }
+            await send("stopped");
+          } else if (action === "stop") {
+            await send("stopped");
+          }
+        }
+
+        if (action === "restart" || action === "start") {
+          await send("starting");
+          await startProcess(exec, configDir, port, profile);
+
+          let finalPid: number | undefined;
+          let started = false;
+          for (let i = 0; i < 20; i++) {
+            await new Promise((r) => setTimeout(r, 500));
+            const s2 = await getProcessStatus(exec, port);
+            if (s2.running) { finalPid = s2.pid; started = true; break; }
+          }
+
+          if (started) {
+            await send("running", { pid: finalPid });
+          } else {
+            await send("failed", { error: "Process did not start within timeout" });
+          }
+        }
+
+        await send("done");
+        auditLog(db, c, `lifecycle.${action}`, `${action} completed via stream (port ${port})`, id);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await send("error", { error: msg });
+        auditLog(db, c, `lifecycle.${action}`, `FAILED: ${msg}`, id);
+      }
+    });
+  });
+
   // --- Config ---
 
   app.get("/:id/config-file", async (c) => {
@@ -431,6 +501,7 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
       const agentList: any[] = config?.agents?.list || [];
       const agentIds = agentList.map((a: any) => a.id);
       if (agentIds.length === 0) agentIds.push("main");
+      let keyWritten = false;
 
       for (const [providerName, p] of Object.entries(providers) as [string, any][]) {
         if (p && typeof p === "object") {
@@ -506,6 +577,7 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
               vResult.email || null,
               vResult.accountInfo ? JSON.stringify(vResult.accountInfo) : null,
             );
+            keyWritten = true;
           }
         }
       }
@@ -528,8 +600,9 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
       }
       config.models.providers = cleanProviders;
       await writeRemoteConfig(exec, configDir, config);
+
       auditLog(db, c, "lifecycle.providers", "LLM providers updated", id);
-      return c.json({ ok: true });
+      return c.json({ ok: true, restartRequired: keyWritten });
     } catch (err: any) {
       auditLog(db, c, "lifecycle.providers", `FAILED: ${err.message}`, id);
       return c.json({ error: err.message }, 500);
@@ -550,6 +623,15 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
       const authData = await readAuthProfiles(exec, configDir, agentId);
       const profiles = authData?.profiles || {};
 
+      const storedOrder: Record<string, string[]> = authData?.order || {};
+      // Build effective order: use stored order if present, otherwise derive from profile keys
+      const effectiveOrder: Record<string, string[]> = {};
+      for (const [pid, cred] of Object.entries(profiles) as [string, any][]) {
+        const prov = cred.provider || pid.split(":")[0];
+        if (!effectiveOrder[prov]) effectiveOrder[prov] = storedOrder[prov] || [];
+        if (!effectiveOrder[prov].includes(pid)) effectiveOrder[prov].push(pid);
+      }
+
       const keys: any[] = [];
       for (const [profileId, cred] of Object.entries(profiles) as [string, any][]) {
         const provider = cred.provider || profileId.split(":")[0];
@@ -559,10 +641,14 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
           "SELECT status, checked_at, error_message, email, account_info FROM provider_keys WHERE instance_id = ? AND profile_id = ?"
         ).get(id, profileId) as any;
 
+        const providerOrder = effectiveOrder[provider] || [];
+        const rank = providerOrder.indexOf(profileId);
+
         keys.push({
           profileId, provider,
           type: cred.type || "api_key",
           keyMasked: masked,
+          rank: rank >= 0 ? rank : 999,
           status: cred.type === "oauth"
             ? (cred.expires && cred.expires < Date.now() ? "expired" : "valid")
             : (cached?.status || "unknown"),
@@ -573,7 +659,9 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
           expiresAt: cred.expires || null,
         });
       }
-      return c.json({ keys });
+      // Sort by rank so primary key appears first
+      keys.sort((a, b) => a.rank - b.rank);
+      return c.json({ keys, order: effectiveOrder });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }
@@ -679,6 +767,36 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
     }
   });
 
+  // Set key priority order for a provider (first = preferred)
+  app.put("/:id/keys/order", async (c) => {
+    const id = c.req.param("id");
+    if (!manager.get(id)) return c.json({ error: "instance not found" }, 404);
+    const { provider, order: newOrder } = await c.req.json<{ provider: string; order: string[] }>();
+    if (!provider || !Array.isArray(newOrder)) return c.json({ error: "provider and order[] required" }, 400);
+
+    const profile = profileFromInstanceId(id);
+    const configDir = getConfigDir(profile);
+    const exec = getExecutor(id, hostStore);
+    try {
+      const config = await readRemoteConfig(exec, configDir);
+      const agentList: any[] = config?.agents?.list || [];
+      const agentIds = agentList.map((a: any) => a.id);
+      if (agentIds.length === 0) agentIds.push("main");
+
+      for (const agentId of agentIds) {
+        const data = await readAuthProfiles(exec, configDir, agentId);
+        if (!data.order) data.order = {};
+        data.order[provider] = newOrder;
+        await writeAuthProfiles(exec, configDir, agentId, data);
+      }
+
+      auditLog(db, c, "lifecycle.key.order", `Key order for ${provider}: ${newOrder.join(", ")}`, id);
+      return c.json({ ok: true, restartRequired: true });
+    } catch (err: any) {
+      return c.json({ error: err.message }, 500);
+    }
+  });
+
   app.delete("/:id/keys/:profileId", async (c) => {
     const id = c.req.param("id");
     const profileId = c.req.param("profileId");
@@ -699,7 +817,7 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
       db.prepare("DELETE FROM provider_keys WHERE instance_id = ? AND profile_id = ?").run(id, profileId);
 
       auditLog(db, c, "lifecycle.key.delete", `Deleted key profile: ${profileId}`, id);
-      return c.json({ ok: true });
+      return c.json({ ok: true, restartRequired: true });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }
@@ -743,53 +861,52 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
 
       clearOAuthFlow();
       auditLog(db, c, "lifecycle.providers.oauth", `OpenAI OAuth configured for agents: ${agentIds.join(", ")}`, id);
-      return c.json({ ok: true, expiresAt: status.credentials.expiresAt, agents: agentIds });
+      return c.json({ ok: true, restartRequired: true, expiresAt: status.credentials.expiresAt, agents: agentIds });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }
   });
 
-  // Sync OAuth tokens from one instance to other instances
+  // Sync keys from one instance to other instances
+  // Supports all key types (OAuth, API key). Adds new keys without overwriting existing different ones.
   app.post("/:id/providers/oauth/sync", requireWrite("lifecycle"), async (c) => {
     const sourceId = c.req.param("id")!;
     const sourceInst = manager.get(sourceId);
     if (!sourceInst) return c.json({ error: "Source instance not found" }, 404);
 
-    let body: { targets?: string[] } = {};
-    try { body = await c.req.json(); } catch { /* empty body = sync to same-host siblings */ }
+    let body: { targets?: string[]; profileIds?: string[] } = {};
+    try { body = await c.req.json(); } catch {}
 
     const sourceProfile = profileFromInstanceId(sourceId);
     const sourceConfigDir = getConfigDir(sourceProfile);
     const sourceExec = getExecutor(sourceId, hostStore);
 
-    // 1. Read OAuth token from source instance (use first agent that has one)
-    let oauthProfile: any = null;
+    // 1. Read all keys from source instance
+    let sourceKeys: Record<string, any> = {};
     try {
       const srcConfig = await readRemoteConfig(sourceExec, sourceConfigDir);
       const srcAgents: any[] = srcConfig?.agents?.list || [];
-      const srcAgentIds = srcAgents.map((a: any) => a.id);
-      if (srcAgentIds.length === 0) srcAgentIds.push("main");
-
-      for (const agentId of srcAgentIds) {
-        const profiles = await readAuthProfiles(sourceExec, sourceConfigDir, agentId);
-        const ocp = profiles?.profiles?.["openai-codex:default"];
-        if (ocp && ocp.access) {
-          oauthProfile = ocp;
-          break;
-        }
-      }
+      const srcAgentId = srcAgents[0]?.id || "main";
+      const srcAuth = await readAuthProfiles(sourceExec, sourceConfigDir, srcAgentId);
+      sourceKeys = srcAuth?.profiles || {};
     } catch (err: any) {
-      return c.json({ error: `Failed to read source token: ${err.message}` }, 500);
+      return c.json({ error: `Failed to read source keys: ${err.message}` }, 500);
     }
 
-    if (!oauthProfile) {
-      return c.json({ error: "No OAuth token found on source instance" }, 400);
+    // Filter to specific profileIds if requested
+    const profileIdsToSync = body.profileIds || Object.keys(sourceKeys);
+    const keysToSync: Record<string, any> = {};
+    for (const pid of profileIdsToSync) {
+      if (sourceKeys[pid]) keysToSync[pid] = sourceKeys[pid];
+    }
+
+    if (Object.keys(keysToSync).length === 0) {
+      return c.json({ error: "No keys found to sync" }, 400);
     }
 
     // 2. Resolve target instances
     let targetIds: string[] = body.targets || [];
     if (targetIds.length === 0) {
-      // Default: all instances on the same host
       const sourceHostKey = sourceId.startsWith("local-") ? "local" : sourceId.replace(/-[^-]+$/, "");
       const all = manager.getAll();
       targetIds = all
@@ -804,7 +921,7 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
       return c.json({ error: "No target instances found" }, 400);
     }
 
-    // 3. Write token to each target instance's agents
+    // 3. Write keys to each target — add without overwriting different keys
     const synced: string[] = [];
     const errors: { id: string; error: string }[] = [];
 
@@ -824,14 +941,38 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
         if (tgtAgentIds.length === 0) tgtAgentIds.push("main");
 
         for (const agentId of tgtAgentIds) {
-          const profiles = await readAuthProfiles(tgtExec, tgtConfigDir, agentId);
-          if (!profiles.version) profiles.version = 1;
-          if (!profiles.profiles) profiles.profiles = {};
-          profiles.profiles["openai-codex:default"] = oauthProfile;
-          await writeAuthProfiles(tgtExec, tgtConfigDir, agentId, profiles);
+          const tgtAuth = await readAuthProfiles(tgtExec, tgtConfigDir, agentId);
+          if (!tgtAuth.version) tgtAuth.version = 1;
+          if (!tgtAuth.profiles) tgtAuth.profiles = {};
+          if (!tgtAuth.order) tgtAuth.order = {};
+
+          for (const [pid, cred] of Object.entries(keysToSync)) {
+            const provider = cred.provider || pid.split(":")[0];
+            const srcSecret = cred.key || cred.token || cred.access || "";
+
+            // Check if this exact key already exists on target (skip duplicate)
+            const existing = tgtAuth.profiles[pid];
+            if (existing) {
+              const existingSecret = existing.key || existing.token || existing.access || "";
+              if (existingSecret === srcSecret) continue; // same key, skip
+              // Different key with same profileId → generate new profileId
+              let n = 2;
+              let newPid = `${provider}:key${n}`;
+              while (tgtAuth.profiles[newPid]) { n++; newPid = `${provider}:key${n}`; }
+              tgtAuth.profiles[newPid] = cred;
+              if (!tgtAuth.order[provider]) tgtAuth.order[provider] = Object.keys(tgtAuth.profiles).filter(k => k.startsWith(`${provider}:`));
+              if (!tgtAuth.order[provider].includes(newPid)) tgtAuth.order[provider].push(newPid);
+            } else {
+              tgtAuth.profiles[pid] = cred;
+              if (!tgtAuth.order[provider]) tgtAuth.order[provider] = [];
+              if (!tgtAuth.order[provider].includes(pid)) tgtAuth.order[provider].push(pid);
+            }
+          }
+
+          await writeAuthProfiles(tgtExec, tgtConfigDir, agentId, tgtAuth);
         }
 
-        // Restart the target gateway so it picks up the new token
+        // Restart the target gateway so it picks up new keys
         const tgtPort: number = tgtConfig?.gateway?.port || 18789;
         await restartProcess(tgtExec, tgtConfigDir, tgtPort, tgtProfile === "default" ? undefined : tgtProfile);
 
@@ -841,11 +982,12 @@ export function lifecycleRoutes(hostStore: HostStore, manager: InstanceManager, 
       }
     }
 
-    auditLog(db, c, "lifecycle.providers.oauth.sync",
-      `Synced OAuth from ${sourceId} to ${synced.length} instance(s)${errors.length ? ` (${errors.length} failed)` : ""}`,
+    const syncedProfileIds = Object.keys(keysToSync);
+    auditLog(db, c, "lifecycle.keys.sync",
+      `Synced ${syncedProfileIds.length} key(s) from ${sourceId} to ${synced.length} instance(s)${errors.length ? ` (${errors.length} failed)` : ""}`,
       sourceId);
 
-    return c.json({ ok: errors.length === 0, synced, errors: errors.length ? errors : undefined });
+    return c.json({ ok: errors.length === 0, synced, syncedKeys: syncedProfileIds, errors: errors.length ? errors : undefined });
   });
 
   // --- Available versions (fetched locally, not from remote host) ---
@@ -1269,36 +1411,42 @@ WantedBy=default.target`;
       const profiles = await readAuthProfiles(exec, configDir, agentId);
 
       const results: any[] = [];
-      const seen = new Set<string>();
+      // Build effective order: stored order + any profiles not yet in order
+      const effOrder: Record<string, string[]> = {};
+      for (const [pid, cr] of Object.entries(profiles.profiles || {}) as [string, any][]) {
+        const prov = cr.provider || pid.split(":")[0];
+        if (!effOrder[prov]) effOrder[prov] = [...(profiles.order?.[prov] || [])];
+        if (!effOrder[prov].includes(pid)) effOrder[prov].push(pid);
+      }
 
-      // 1) OAuth providers (Codex)
+      // 1) OAuth providers (Codex) — query ALL, not just first per provider
       for (const [key, cred] of Object.entries(profiles.profiles || {}) as [string, any][]) {
         if (cred.type === "oauth" && cred.access) {
           const provider = cred.provider || key.split(":")[0];
-          if (seen.has(provider)) continue;
-          seen.add(provider);
+          const providerOrder = effOrder[provider] || [];
+          const rank = providerOrder.indexOf(key);
           try {
             const quota = await fetchCodexQuota(exec, cred.access, cred.accountId);
-            results.push({ profileKey: key, ...quota });
+            results.push({ profileKey: key, keyMasked: maskKey(cred.access), rank: rank >= 0 ? rank : 999, ...quota });
           } catch (err: any) {
-            results.push({ profileKey: key, provider, displayName: provider, windows: [], error: err.message });
+            results.push({ profileKey: key, keyMasked: maskKey(cred.access), rank: rank >= 0 ? rank : 999, provider, displayName: provider, windows: [], error: err.message });
           }
         }
       }
 
-      // 2) API-key providers with balance APIs (DeepSeek, Moonshot, Zhipu)
+      // 2) API-key providers with balance APIs — query ALL
       for (const [key, cred] of Object.entries(profiles.profiles || {}) as [string, any][]) {
         if (cred.type === "api_key" && cred.key) {
           const provider = cred.provider || key.split(":")[0];
-          if (seen.has(provider)) continue;
           const fetcher = getApiKeyFetcher(provider);
           if (!fetcher) continue;
-          seen.add(provider);
+          const providerOrder = effOrder[provider] || [];
+          const rank = providerOrder.indexOf(key);
           try {
             const quota = await fetcher(exec, cred.key);
-            results.push({ profileKey: key, ...quota });
+            results.push({ profileKey: key, keyMasked: maskKey(cred.key), rank: rank >= 0 ? rank : 999, ...quota });
           } catch (err: any) {
-            results.push({ profileKey: key, provider, displayName: provider, windows: [], error: err.message });
+            results.push({ profileKey: key, keyMasked: maskKey(cred.key), rank: rank >= 0 ? rank : 999, provider, displayName: provider, windows: [], error: err.message });
           }
         }
       }

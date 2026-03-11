@@ -460,6 +460,13 @@
       "runningLabel": "运行中",
       "stoppedLabel": "已停止",
       "processing": "正在处理 {{action}}...",
+      "phaseChecking": "正在检查当前状态...",
+      "phaseStopping": "正在停止进程 (PID {{pid}})...",
+      "phaseStopped": "进程已停止",
+      "phaseStarting": "正在启动进程...",
+      "phaseRunning": "进程已启动 (PID {{pid}})",
+      "phaseFailed": "启动失败：{{error}}",
+      "phaseError": "错误：{{error}}",
       "version": "版本",
       "installed": "已安装",
       "latest": "最新版",
@@ -837,7 +844,10 @@
       "keyPlaceholder": "sk-...",
       "addKeyTitle": "为 {{provider}} 添加 API Key",
       "expired": "已过期",
-      "expiresIn": "{{time}}后过期"
+      "expiresIn": "{{time}}后过期",
+      "primary": "首选",
+      "moveUp": "上移（提高优先级）",
+      "moveDown": "下移（降低优先级）"
     }
   }
 }

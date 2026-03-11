@@ -460,6 +460,13 @@
       "runningLabel": "Running",
       "stoppedLabel": "Stopped",
       "processing": "Processing {{action}}...",
+      "phaseChecking": "Checking current status...",
+      "phaseStopping": "Stopping process (PID {{pid}})...",
+      "phaseStopped": "Process stopped",
+      "phaseStarting": "Starting process...",
+      "phaseRunning": "Process started (PID {{pid}})",
+      "phaseFailed": "Start failed: {{error}}",
+      "phaseError": "Error: {{error}}",
       "version": "Version",
       "installed": "Installed",
       "latest": "Latest",
@@ -837,7 +844,10 @@
       "keyPlaceholder": "sk-...",
       "addKeyTitle": "Add API Key for {{provider}}",
       "expired": "Expired",
-      "expiresIn": "Expires in {{time}}"
+      "expiresIn": "Expires in {{time}}",
+      "primary": "Primary",
+      "moveUp": "Move up (higher priority)",
+      "moveDown": "Move down (lower priority)"
     }
   }
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { ChevronLeft, RefreshCw, ArrowUpDown, Play, Square, RotateCcw, Save, Terminal, Camera, GitCompare, Trash2, Users, Plus, Radio, LogOut, Search, Stethoscope, ShieldAlert } from "lucide-react";
+import { ChevronLeft, ChevronUp, ChevronDown, RefreshCw, ArrowUpDown, Play, Square, RotateCcw, Save, Terminal, Camera, GitCompare, Trash2, Users, Plus, Radio, LogOut, Search, Stethoscope, ShieldAlert } from "lucide-react";
 import { useInstances, type InstanceInfo } from "../hooks/useInstances";
 import { api, get, post, put } from "../lib/api";
 import { del } from "../lib/api";
@@ -790,12 +790,14 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
   const [costEstimate, setCostEstimate] = useState<{ totalCost: number; byModel: Record<string, any>; matched: number; unmatched: number; sessionCount?: number; oldestSession?: number; newestSession?: number } | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(false);
 
+  const [showRestartPrompt, setShowRestartPrompt] = useState(false);
+
   // Key management state
   const [keys, setKeys] = useState<{
     profileId: string; provider: string; type: string;
     keyMasked: string; status: string; checkedAt: string | null;
     errorMessage: string | null; email: string | null;
-    expiresAt: number | null;
+    expiresAt: number | null; rank: number;
   }[]>([]);
   const [keysLoading, setKeysLoading] = useState(false);
   const [verifyingKey, setVerifyingKey] = useState<string | null>(null);
@@ -884,8 +886,28 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
   const handleDeleteKey = async (profileId: string, keyMasked: string) => {
     if (!confirm(t("models.keys.deleteConfirm", { key: keyMasked }))) return;
     try {
-      await del(`/lifecycle/${inst.id}/keys/${encodeURIComponent(profileId)}`);
+      const res = await del<{ ok: boolean; restartRequired?: boolean }>(`/lifecycle/${inst.id}/keys/${encodeURIComponent(profileId)}`);
       await fetchKeys();
+      if (res.restartRequired) setShowRestartPrompt(true);
+    } catch { /* ignore */ }
+  };
+
+  const handleReorderKey = async (providerName: string, profileId: string, direction: "up" | "down") => {
+    // Get current keys for this provider, sorted by rank
+    const provKeys = keys
+      .filter(k => k.provider === providerName || k.profileId.startsWith(providerName + ":") || k.profileId.startsWith(providerName + "-"))
+      .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
+    const ids = provKeys.map(k => k.profileId);
+    const idx = ids.indexOf(profileId);
+    if (idx < 0) return;
+    if (direction === "up" && idx === 0) return;
+    if (direction === "down" && idx === ids.length - 1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    [ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]];
+    try {
+      const res = await put<{ ok: boolean; restartRequired?: boolean }>(`/lifecycle/${inst.id}/keys/order`, { provider: providerName, order: ids });
+      await fetchKeys();
+      if (res.restartRequired) setShowRestartPrompt(true);
     } catch { /* ignore */ }
   };
 
@@ -915,8 +937,11 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
     setSaving(true);
     setMessage(null);
     try {
-      await put(`/lifecycle/${inst.id}/providers`, { providers: next });
+      const res = await put<{ ok: boolean; restartRequired?: boolean }>(`/lifecycle/${inst.id}/providers`, { providers: next });
       setProviders(next);
+      if (res.restartRequired) {
+        setShowRestartPrompt(true);
+      }
       setMessage(t("instance.llm.saved"));
       setTimeout(() => setMessage(null), 2000);
     } catch (err: any) {
@@ -1031,9 +1056,13 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">{q.displayName || q.provider}</h3>
-                {q.plan && q.account && <p className="text-[11px] text-ink-3 mt-0.5">{q.account}</p>}
+                {q.account && <p className="text-[11px] text-ink-3 mt-0.5">{q.account}</p>}
+                {q.keyMasked && <p className="text-[10px] text-ink-3 font-mono">{q.profileKey} ({q.keyMasked})</p>}
               </div>
-              {q.plan && <span className="text-xs text-ink-3">{q.plan}</span>}
+              <div className="flex items-center gap-2">
+                {q.rank === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-ok/20 text-ok">{t("models.keys.primary")}</span>}
+                {q.plan && <span className="text-xs text-ink-3">{q.plan}</span>}
+              </div>
             </div>
             {q.error ? (
               <p className="text-xs text-danger">{q.error}</p>
@@ -1163,8 +1192,11 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
                     {provKeys.length === 0 && (
                       <div className="px-4 py-3 text-sm text-ink-3">{t("models.keys.noKeys")}</div>
                     )}
-                    {provKeys.map(k => (
+                    {provKeys.map((k, ki) => (
                       <div key={k.profileId} className="flex items-center gap-3 px-4 py-2.5">
+                        {ki === 0 && provKeys.length > 1 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-ok/20 text-ok shrink-0">{t("models.keys.primary")}</span>
+                        )}
                         <code className="text-xs text-ink font-mono">{k.keyMasked}</code>
                         <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${
                           k.status === "valid" ? "bg-ok/10 text-ok" :
@@ -1192,6 +1224,25 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
                           <span className="text-xs text-ink-3 ml-auto">
                             {formatTimeAgo(k.checkedAt, t)}
                           </span>
+                        )}
+                        {/* Reorder buttons (when >1 key for this provider) */}
+                        {provKeys.length > 1 && (
+                          <div className="flex flex-col gap-0.5 shrink-0">
+                            <button
+                              onClick={() => handleReorderKey(name, k.profileId, "up")}
+                              disabled={ki === 0}
+                              className="text-ink-3 hover:text-ink transition-colors disabled:opacity-20"
+                              title={t("models.keys.moveUp")}>
+                              <ChevronUp size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleReorderKey(name, k.profileId, "down")}
+                              disabled={ki === provKeys.length - 1}
+                              className="text-ink-3 hover:text-ink transition-colors disabled:opacity-20"
+                              title={t("models.keys.moveDown")}>
+                              <ChevronDown size={12} />
+                            </button>
+                          </div>
                         )}
                         {k.type !== "oauth" && (
                           <button
@@ -1374,13 +1425,14 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
                             if (s.status === "complete") {
                               clearInterval(poll);
                               setOauthStatus("authenticating");
-                              const saveR = await post<{ ok: boolean; expiresAt?: number }>(`/lifecycle/${inst.id}/providers/oauth/save`, {});
+                              const saveR = await post<{ ok: boolean; restartRequired?: boolean; expiresAt?: number }>(`/lifecycle/${inst.id}/providers/oauth/save`, {});
                               if (saveR.ok) {
                                 setOauthStatus("complete");
                                 setHasOAuthToken(true);
                                 setOauthExpiry(saveR.expiresAt || null);
                                 setOauthAuthUrl(null);
                                 setMessage(t("instance.llm.openaiOauthConfigured"));
+                                if (saveR.restartRequired) setShowRestartPrompt(true);
                                 await fetchProviders();
                                 await fetchKeys();
                                 // Auto-save provider config (baseUrl/models) and close form
@@ -1655,6 +1707,8 @@ function LlmTab({ inst }: { inst: InstanceInfo }) {
           </div>
         </div>
       )}
+
+      <RestartDialog instanceId={inst.id} open={showRestartPrompt} onClose={() => setShowRestartPrompt(false)} />
     </div>
   );
 }
@@ -1757,12 +1811,50 @@ function ControlTab({ inst }: { inst: InstanceInfo }) {
     return () => clearInterval(timer);
   }, [inst.id]);
 
+  const [actionPhase, setActionPhase] = useState<{ action: string; phase: string; pid?: number; error?: string } | null>(null);
+
   const doAction = async (action: string) => {
     setBusy(action);
+    setActionPhase({ action, phase: "connecting" });
     try {
-      await post(`/lifecycle/${inst.id}/${action}`);
-      await fetchStatus();
-    } finally { setBusy(""); }
+      const res = await fetch(`/api/lifecycle/${inst.id}/process-action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        setActionPhase({ action, phase: "error", error: (err as any).error || res.statusText });
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value);
+        const chunks = text.split("\n").filter(l => l.startsWith("data: "));
+        for (const chunk of chunks) {
+          try {
+            const data = JSON.parse(chunk.slice(6));
+            if (data.phase === "done") {
+              await fetchStatus();
+              setActionPhase(null);
+            } else if (data.phase === "error" || data.phase === "failed") {
+              setActionPhase({ action, phase: data.phase, error: data.error });
+            } else {
+              setActionPhase({ action, phase: data.phase, pid: data.pid });
+            }
+          } catch { /* ignore partial chunk */ }
+        }
+      }
+    } catch (err: any) {
+      setActionPhase({ action, phase: "error", error: err.message });
+    } finally {
+      setBusy("");
+    }
   };
 
   const saveConfig = async () => {
@@ -1894,8 +1986,32 @@ function ControlTab({ inst }: { inst: InstanceInfo }) {
             </button>
           </div>
         </div>
-        {busy && ["start", "stop", "restart"].includes(busy) && (
-          <p className="mt-2 text-sm text-ink-3 animate-pulse">{t("instance.control.processing", { action: busy })}</p>
+        {actionPhase && (
+          <div className="mt-2 flex items-center gap-2 text-sm">
+            {actionPhase.phase === "error" || actionPhase.phase === "failed" ? (
+              <span className="text-danger">{
+                actionPhase.phase === "failed"
+                  ? t("instance.control.phaseFailed", { error: actionPhase.error || "" })
+                  : t("instance.control.phaseError", { error: actionPhase.error || "" })
+              }</span>
+            ) : actionPhase.phase === "running" || actionPhase.phase === "stopped" ? (
+              <span className="text-ok">{
+                actionPhase.phase === "running"
+                  ? t("instance.control.phaseRunning", { pid: actionPhase.pid || "" })
+                  : t("instance.control.phaseStopped")
+              }</span>
+            ) : (
+              <>
+                <RefreshCw size={14} className="animate-spin text-ink-3" />
+                <span className="text-ink-3">{
+                  actionPhase.phase === "checking" ? t("instance.control.phaseChecking") :
+                  actionPhase.phase === "stopping" ? t("instance.control.phaseStopping", { pid: actionPhase.pid || "" }) :
+                  actionPhase.phase === "starting" ? t("instance.control.phaseStarting") :
+                  t("instance.control.processing", { action: actionPhase.action })
+                }</span>
+              </>
+            )}
+          </div>
         )}
       </div>
 
