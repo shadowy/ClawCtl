@@ -120,7 +120,8 @@
       "addAndScan": "添加并扫描",
       "adding": "添加中...",
       "hostAddedSuccess": "主机添加成功，发现 {{n}} 个实例。",
-      "hostAddedNoInstances": "主机已添加。未找到 OpenClaw 实例 — 前往 设置 > 远程主机 在此主机上安装 OpenClaw。"
+      "hostAddedNoInstances": "主机已添加。未找到 OpenClaw 实例 — 前往 设置 > 远程主机 在此主机上安装 OpenClaw。",
+      "hostDuplicate": "该主机已添加过，请查看仪表盘上的现有条目。"
     },
     "emptyHost": {
       "rescanHost": "重新扫描主机",

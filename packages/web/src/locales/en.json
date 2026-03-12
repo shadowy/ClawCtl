@@ -120,7 +120,8 @@
       "addAndScan": "Add & Scan",
       "adding": "Adding...",
       "hostAddedSuccess": "Host added successfully. Found {{n}} instance(s).",
-      "hostAddedNoInstances": "Host added. No OpenClaw instances found — go to Settings > Remote Hosts to install OpenClaw on this host."
+      "hostAddedNoInstances": "Host added. No OpenClaw instances found — go to Settings > Remote Hosts to install OpenClaw on this host.",
+      "hostDuplicate": "This host has already been added. Check the existing entry on the dashboard."
     },
     "emptyHost": {
       "rescanHost": "Rescan host",

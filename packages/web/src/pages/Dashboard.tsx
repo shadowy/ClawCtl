@@ -263,7 +263,13 @@ function AddInstanceDialog({ onClose, onAdd, isAdmin }: { onClose: () => void; o
         setHostMsg(t("dashboard.addDialog.hostAddedNoInstances"));
       }
       setHostDone(true);
-    } catch (e: any) { setHostMsg(`Error: ${e.message}`); }
+    } catch (e: any) {
+      if (e.message === "duplicate") {
+        setHostMsg(t("dashboard.addDialog.hostDuplicate"));
+      } else {
+        setHostMsg(`Error: ${e.message}`);
+      }
+    }
     finally { setHostBusy(false); }
   };
 

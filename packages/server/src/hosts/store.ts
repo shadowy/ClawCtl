@@ -48,6 +48,14 @@ export class HostStore {
     return this.rowToHost(row);
   }
 
+  findByConnection(host: string, port: number, username: string): RemoteHost | undefined {
+    const row = this.db.prepare(
+      "SELECT * FROM remote_hosts WHERE host = ? AND port = ? AND username = ?"
+    ).get(host, port, username) as RemoteHostRow | undefined;
+    if (!row) return undefined;
+    return this.rowToHost(row);
+  }
+
   list(): RemoteHost[] {
     const rows = this.db.prepare("SELECT * FROM remote_hosts ORDER BY id").all() as RemoteHostRow[];
     return rows.map((r) => this.rowToHost(r));

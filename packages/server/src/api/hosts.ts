@@ -24,6 +24,11 @@ export function hostRoutes(hostStore: HostStore, manager: InstanceManager, db: D
     if (!body.host || !body.username || !body.credential) {
       return c.json({ error: "host, username, and credential are required" }, 400);
     }
+    const port = body.port || 22;
+    const existing = hostStore.findByConnection(body.host, port, body.username);
+    if (existing) {
+      return c.json({ error: "duplicate", existingId: existing.id, label: existing.label }, 409);
+    }
     const host = hostStore.create({
       label: body.label || body.host,
       host: body.host,
@@ -53,6 +58,27 @@ export function hostRoutes(hostStore: HostStore, manager: InstanceManager, db: D
     closeTunnelsForHost(id);
     auditLog(db, c, "host.delete", `Deleted host #${id}`);
     return c.json({ ok: true });
+  });
+
+  // Remove duplicate hosts (keep the one with lowest id per host+port+username)
+  app.post("/dedup", (c) => {
+    const all = hostStore.list();
+    const seen = new Map<string, number>();
+    const removed: number[] = [];
+    for (const h of all) {
+      const key = `${h.host}:${h.port}:${h.username}`;
+      if (seen.has(key)) {
+        hostStore.delete(h.id);
+        closeTunnelsForHost(h.id);
+        removed.push(h.id);
+      } else {
+        seen.set(key, h.id);
+      }
+    }
+    if (removed.length) {
+      auditLog(db, c, "host.dedup", `Removed ${removed.length} duplicate host(s): ${removed.join(", ")}`);
+    }
+    return c.json({ ok: true, removed: removed.length, removedIds: removed });
   });
 
   // Scan a remote host for OpenClaw instances
