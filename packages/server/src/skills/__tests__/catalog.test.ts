@@ -150,7 +150,8 @@ describe("filterCatalog()", () => {
   });
 });
 
-describe("searchClawHub()", () => {
+// ClawHub integration tests — skip in CI (external API, flaky)
+describe.skipIf(!process.env["RUN_INTEGRATION"])("searchClawHub()", () => {
   it("returns results from ClawHub API", async () => {
     const results = await searchClawHub("law");
     expect(results.length).toBeGreaterThan(0);
@@ -165,7 +166,7 @@ describe("searchClawHub()", () => {
   });
 });
 
-describe("fetchClawHubDetail()", () => {
+describe.skipIf(!process.env["RUN_INTEGRATION"])("fetchClawHubDetail()", () => {
   it("returns stats and author for a known skill", async () => {
     const detail = await fetchClawHubDetail("law");
     expect(detail).not.toBeNull();
