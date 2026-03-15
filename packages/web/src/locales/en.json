@@ -784,6 +784,8 @@
     "stars": "Stars",
     "downloads": "Downloads",
     "noResults": "No skills found",
+    "clawhubRateLimited": "ClawHub API rate limit reached. Please try again later.",
+    "clawhubUnavailable": "ClawHub marketplace is temporarily unavailable.",
     "suspiciousWarning": "Flagged suspicious",
     "suspiciousDetail": "This skill is flagged as suspicious by VirusTotal Code Insight. It may contain risky patterns (crypto keys, external APIs, eval, etc.). Please review the skill code carefully before proceeding.",
     "forceInstall": "I've reviewed — install anyway",

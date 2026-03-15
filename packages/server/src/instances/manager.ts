@@ -151,6 +151,14 @@ export class InstanceManager extends EventEmitter {
     const client = this.clients.get(id);
     if (!client || client.conn.status !== "connected") return null;
     const info = await client.fetchFullInstance();
+    // Preserve previous data for fields that came back empty due to transient errors
+    const prev = this.instances.get(id);
+    if (prev) {
+      if (!info.securityAudit?.length && prev.securityAudit?.length) info.securityAudit = prev.securityAudit;
+      if (!info.agents.length && prev.agents.length) info.agents = prev.agents;
+      if (!info.sessions.length && prev.sessions.length) info.sessions = prev.sessions;
+      if (!info.skills.length && prev.skills.length) info.skills = prev.skills;
+    }
     this.instances.set(id, info);
     this.emit("change");
     return info;

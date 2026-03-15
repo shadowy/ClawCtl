@@ -593,7 +593,10 @@ export async function searchClawHub(
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(CLAWHUB_SEARCH_TIMEOUT),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      if (res.status === 429) throw new Error("rate_limited");
+      return [];
+    }
     const data = await res.json() as { results?: { slug: string; displayName: string; summary?: string; score?: number; updatedAt?: number }[] };
     if (!data.results) return [];
 

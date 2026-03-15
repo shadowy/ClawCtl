@@ -784,6 +784,8 @@
     "stars": "收藏",
     "downloads": "下载量",
     "noResults": "未找到匹配的 Skill",
+    "clawhubRateLimited": "ClawHub API 请求频率超限，请稍后重试。",
+    "clawhubUnavailable": "ClawHub 市场暂时不可用。",
     "suspiciousWarning": "已标记为可疑",
     "suspiciousDetail": "该 Skill 被 VirusTotal Code Insight 标记为可疑，可能包含风险代码（加密密钥、外部 API 调用、eval 等）。请仔细审查 Skill 代码后再继续。",
     "forceInstall": "已审查，仍然安装",

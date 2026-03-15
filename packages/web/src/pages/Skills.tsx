@@ -785,6 +785,7 @@ export function Skills() {
   const [searchingHub, setSearchingHub] = useState(false);
   const [clawhubHasMore, setClawhubHasMore] = useState(false);
   const [clawhubLoadingMore, setClawhubLoadingMore] = useState(false);
+  const [clawhubError, setClawhubError] = useState<string | null>(null);
   const [clawhubStats, setClawhubStats] = useState<Record<string, { downloads: number; stars: number; installs: number; author?: string; suspicious?: boolean }>>({});
 
   const fetchData = useCallback(() => {
@@ -814,13 +815,15 @@ export function Skills() {
       return;
     }
     setSearchingHub(true);
+    setClawhubError(null);
     const timer = setTimeout(async () => {
       try {
-        const res = await get<{ results: SkillCatalogEntry[]; clawhub: SkillCatalogEntry[]; hasMore?: boolean }>(
+        const res = await get<{ results: SkillCatalogEntry[]; clawhub: SkillCatalogEntry[]; hasMore?: boolean; clawhubError?: string }>(
           `/skills/search?q=${encodeURIComponent(search.trim())}`,
         );
         setClawhubResults(res.clawhub || []);
         setClawhubHasMore(!!res.hasMore);
+        if (res.clawhubError) setClawhubError(res.clawhubError);
       } catch {
         setClawhubResults([]);
         setClawhubHasMore(false);
@@ -1058,6 +1061,10 @@ export function Skills() {
               <p className="text-xs text-amber-500/80 mb-3">{t("skills.clawhubWarning")}</p>
               {searchingHub ? (
                 <div className="text-sm text-ink-3 py-4">{t("common.loading")}</div>
+              ) : clawhubError ? (
+                <div className="text-sm text-amber-500 py-4 text-center">
+                  {clawhubError === "rate_limited" ? t("skills.clawhubRateLimited") : t("skills.clawhubUnavailable")}
+                </div>
               ) : clawhubResults.length === 0 ? (
                 <div className="text-sm text-ink-3 py-4 text-center">{t("skills.noResults")}</div>
               ) : (

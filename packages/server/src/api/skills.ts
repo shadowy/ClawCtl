@@ -53,14 +53,19 @@ export function skillRoutes(db: Database.Database, manager: InstanceManager, hos
 
     // Also search ClawHub marketplace when there's a text query
     let clawhub: Awaited<ReturnType<typeof searchClawHub>> = [];
+    let clawhubError: string | undefined;
     if (q.trim()) {
-      clawhub = await searchClawHub(q, limit, offset);
+      try {
+        clawhub = await searchClawHub(q, limit, offset);
+      } catch (e: any) {
+        clawhubError = e.message === "rate_limited" ? "rate_limited" : "unavailable";
+      }
       // Deduplicate: remove ClawHub results that already exist in bundled
       const bundledNames = new Set(bundled.map((b) => b.name));
       clawhub = clawhub.filter((ch) => !bundledNames.has(ch.name));
     }
 
-    return c.json({ results: bundled, clawhub, hasMore: clawhub.length === limit });
+    return c.json({ results: bundled, clawhub, hasMore: clawhub.length === limit, clawhubError });
   });
 
   // GET /clawhub/details?slugs=a,b,c — batch fetch stats for ClawHub skills
