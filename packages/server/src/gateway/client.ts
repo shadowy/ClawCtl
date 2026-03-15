@@ -386,7 +386,7 @@ export class GatewayClient extends EventEmitter {
     return {
       id: this.conn.id,
       connection: this.conn,
-      version: this.conn.binaryVersion || (health as any)?.version,
+      version: this.conn.binaryVersion || ((health as any)?.version?.match(/(\d+\.\d+\.\d+)/)?.[1]) || (health as any)?.version,
       health: health as HealthStatus,
       agents: resolvedAgents,
       channels,

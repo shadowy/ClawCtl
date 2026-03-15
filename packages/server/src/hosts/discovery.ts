@@ -27,13 +27,15 @@ export async function discoverRemoteInstances(
   `);
   console.log(`[discovery] SSH returned ${stdout.length} bytes`);
 
-  // Extract binary version
+  // Extract binary version — handles "2026.3.8" and "OpenClaw 2026.3.8 (abc1234)" formats
   let binaryVersion: string | undefined;
   const verParts = stdout.split(VER_DELIM);
   if (verParts.length > 1) {
     const verLine = verParts[1].split(DELIM)[0].trim().split("\n")[0].trim();
-    if (verLine && /^\d/.test(verLine)) {
-      binaryVersion = verLine;
+    // Try to extract version number from the line
+    const verMatch = verLine.match(/(\d+\.\d+\.\d+)/);
+    if (verMatch) {
+      binaryVersion = verMatch[1];
       console.log(`[discovery] binary version: ${binaryVersion}`);
     }
   }
