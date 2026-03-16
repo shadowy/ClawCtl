@@ -105,6 +105,21 @@ export class GatewayClient extends EventEmitter {
             this.rpc("connect", connectParams)
               .then((helloOk) => {
                 this.helloOk = helloOk;
+                // Extract version from hello-ok, falling back to CLI if needed
+                const helloVer = helloOk?.server?.version;
+                const verMatch = helloVer?.match(/(\d+\.\d+\.\d+)/);
+                if (verMatch) {
+                  this.conn.binaryVersion = verMatch[1];
+                } else if (!this.conn.binaryVersion && this.conn.id.startsWith("local-")) {
+                  // Local instance: try to get version from CLI
+                  import("child_process").then(({ execSync }) => {
+                    try {
+                      const out = execSync("openclaw --version 2>/dev/null", { timeout: 3000 }).toString().trim();
+                      const m = out.match(/(\d+\.\d+\.\d+)/);
+                      if (m) this.conn.binaryVersion = m[1];
+                    } catch { /* ignore */ }
+                  }).catch(() => {});
+                }
                 if (!settled) {
                   settled = true;
                   clearTimeout(timeout);
