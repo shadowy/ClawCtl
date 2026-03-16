@@ -54,6 +54,54 @@ export function monitoringRoutes(hostStore: HostStore, manager: InstanceManager)
   return app;
 }
 
+async function fetchLocalMetrics(manager: InstanceManager): Promise<HostMetrics | null> {
+  const allInstances = manager.getAll();
+  const localInstances = allInstances
+    .filter((inst) => inst.id.startsWith("local-"))
+    .map((inst) => ({
+      id: inst.id,
+      label: inst.connection.label || inst.id,
+      status: inst.connection.status,
+      sessionCount: inst.sessions.length,
+    }));
+  if (localInstances.length === 0) return null;
+
+  try {
+    const { execSync } = await import("child_process");
+    const os = await import("os");
+    const cores = os.cpus().length;
+    const loadAvg = os.loadavg();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    const uptime = os.uptime();
+
+    // Top processes (Linux only)
+    let topProcesses: TopProcess[] | undefined;
+    try {
+      const psOut = execSync("ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu --no-headers 2>/dev/null | head -8", { timeout: 3000 }).toString();
+      topProcesses = psOut.split("\n").filter((l) => l.trim()).map((line) => {
+        const cols = line.trim().split(/\s+/);
+        return { pid: parseInt(cols[0]) || 0, user: cols[1] || "", cpu: parseFloat(cols[2]) || 0, mem: parseFloat(cols[3]) || 0, command: cols.slice(4).join(" ") };
+      }).filter((p) => p.cpu >= 1 || p.mem >= 5);
+      if (topProcesses.length === 0) topProcesses = undefined;
+    } catch { /* non-Linux or ps not available */ }
+
+    return {
+      hostId: 0,
+      label: os.hostname(),
+      host: "localhost",
+      cpu: { loadAvg1m: loadAvg[0], loadAvg5m: loadAvg[1], cores, usageEstimate: Math.min(Math.round((loadAvg[0] / cores) * 1000) / 10, 100) },
+      memory: { used: usedMem, total: totalMem, percent: Math.round((usedMem / totalMem) * 1000) / 10 },
+      uptime,
+      instances: localInstances,
+      topProcesses,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchAllMetrics(hostStore: HostStore, manager: InstanceManager): Promise<HostMetrics[]> {
     const hosts = hostStore.list();
     const allInstances = manager.getAll();
@@ -151,6 +199,10 @@ async function fetchAllMetrics(hostStore: HostStore, manager: InstanceManager): 
         }
       }),
     );
+
+    // Prepend local host metrics if there are local instances
+    const local = await fetchLocalMetrics(manager);
+    if (local) results.unshift(local);
 
     return results;
 }
