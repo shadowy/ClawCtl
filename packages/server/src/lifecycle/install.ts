@@ -318,13 +318,41 @@ export async function streamInstall(
     await emit({ step: "Check services", status: "done", detail: `${unitFiles.length} service(s) found` });
 
     await emit({ step: "Update services", status: "running" });
+
+    // Resolve the actual binary entrypoint for the newly-installed version.
+    // `which openclaw` returns the wrapper (e.g. /usr/bin/openclaw); we need
+    // the dist/index.js it points to, so ExecStart uses the correct path
+    // even when the npm prefix changed across upgrades.
+    const whichR = await exec.exec("which openclaw 2>/dev/null");
+    const cliBin = whichR.stdout.trim() || "";
+    let newDistPath = "";
+    if (cliBin) {
+      // Resolve the real path behind the symlink and find dist/index.js
+      const realR = await exec.exec(`readlink -f '${cliBin}' 2>/dev/null`);
+      const realBin = realR.stdout.trim();
+      if (realBin) {
+        // openclaw.mjs sits next to dist/; resolve dist/index.js from there
+        const distR = await exec.exec(`dirname '${realBin}' 2>/dev/null`);
+        const pkgDir = distR.stdout.trim();
+        if (pkgDir) {
+          const indexPath = `${pkgDir}/dist/index.js`;
+          const existsR = await exec.exec(`test -f '${indexPath}' && echo yes`);
+          if (existsR.stdout.trim() === "yes") newDistPath = indexPath;
+        }
+      }
+    }
+
     for (const uf of unitFiles) {
       await exec.exec(`sed -i 's/OPENCLAW_SERVICE_VERSION=[^ ]*/OPENCLAW_SERVICE_VERSION=${newVersion}/' '${uf}' 2>/dev/null; true`);
       // Also update Description line
       await exec.exec(`sed -i 's/\\(Description=OpenClaw Gateway.*v\\)[^ )]*\\(.*\\)/\\1${newVersion}\\2/' '${uf}' 2>/dev/null; true`);
+      // Update ExecStart binary path if the npm install location changed
+      if (newDistPath) {
+        await exec.exec(`sed -i 's|node .*/dist/index\\.js|node ${newDistPath}|' '${uf}' 2>/dev/null; true`);
+      }
     }
     await exec.exec("systemctl --user daemon-reload 2>/dev/null; true");
-    await emit({ step: "Update services", status: "done", detail: `Updated to v${newVersion}` });
+    await emit({ step: "Update services", status: "done", detail: `Updated to v${newVersion}${newDistPath ? " (binary path synced)" : ""}` });
 
     // Restart running services
     await emit({ step: "Restart services", status: "running" });
