@@ -11,8 +11,17 @@ interface TunnelInfo {
 
 const activeTunnels = new Map<string, TunnelInfo>();
 
-// Starting port for local forwards — auto-increments
-let nextLocalPort = 19000;
+// Starting port for local forwards — configurable via env
+const TUNNEL_PORT_START = parseInt(process.env.CLAWCTL_TUNNEL_PORT_START || "19000");
+const TUNNEL_PORT_END = parseInt(process.env.CLAWCTL_TUNNEL_PORT_END || "19999");
+let nextLocalPort = TUNNEL_PORT_START;
+
+function getNextPort(): number {
+  if (nextLocalPort > TUNNEL_PORT_END) {
+    throw new Error("Tunnel port exhausted: exceeded range " + TUNNEL_PORT_START + "-" + TUNNEL_PORT_END);
+  }
+  return nextLocalPort++;
+}
 
 function tunnelKey(hostId: number, remotePort: number): string {
   return `${hostId}:${remotePort}`;
@@ -33,7 +42,7 @@ export async function ensureTunnel(
   const existing = activeTunnels.get(key);
   if (existing) return existing.localPort;
 
-  const localPort = nextLocalPort++;
+  const localPort = getNextPort();
   console.log(`[tunnel] creating ${host.host}:${remotePort} -> 127.0.0.1:${localPort}`);
 
   const sshConn = new Client();
@@ -96,7 +105,7 @@ export async function ensureTunnel(
       break;
     } catch (err: any) {
       if (err.code === "EADDRINUSE" && attempt < 9) {
-        boundPort = nextLocalPort++;
+        boundPort = getNextPort();
         continue;
       }
       throw err;
